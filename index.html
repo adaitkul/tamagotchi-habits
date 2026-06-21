@@ -82,6 +82,60 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
 .habit-item.done .checkmark::after{display:block;}
 
 .confetti-overlay{position:fixed;inset:0;pointer-events:none;z-index:200;}
+
+/* Tab nav */
+.tabbar{display:flex;background:var(--surface);border-bottom:1px solid var(--border);}
+.tab-btn{flex:1;padding:11px 0;background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;border-bottom:2px solid transparent;transition:color 0.2s,border-color 0.2s;}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+.page{display:none;}
+.page.active{display:flex;flex-direction:column;gap:16px;}
+
+/* Points balance */
+.points-card{background:linear-gradient(135deg,#1a1a2e,#22223a);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center;}
+.points-val{font-size:38px;font-weight:800;color:var(--gold);line-height:1;}
+.points-label{font-size:12px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:1px;}
+.points-hint{font-size:12px;color:var(--muted);margin-top:10px;}
+
+/* Rewards list */
+.rewards-list{display:flex;flex-direction:column;gap:10px;}
+.reward-item{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:13px 15px;display:flex;align-items:center;gap:13px;}
+.reward-icon{font-size:20px;width:26px;text-align:center;flex-shrink:0;}
+.reward-text{flex:1;min-width:0;}
+.reward-name{font-size:15px;color:var(--text);}
+.reward-cost{font-size:12px;color:var(--gold);margin-top:1px;font-weight:600;}
+.reward-actions{display:flex;gap:6px;align-items:center;flex-shrink:0;}
+.btn-redeem{padding:7px 14px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+.btn-redeem:disabled{background:#3a3a4a;color:var(--muted);cursor:not-allowed;}
+.btn-edit,.btn-del{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:4px 6px;-webkit-tap-highlight-color:transparent;}
+.btn-del:active{color:#e94560;}
+.btn-edit:active{color:var(--accent);}
+
+.add-reward-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:13px;background:var(--surface);border:1px dashed var(--border);border-radius:14px;color:var(--accent);font-size:14px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+
+/* History */
+.history-list{display:flex;flex-direction:column;gap:8px;}
+.history-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;font-size:13px;}
+.history-name{color:var(--text);}
+.history-meta{color:var(--muted);font-size:11px;margin-top:2px;}
+.history-cost{color:#f87171;font-weight:600;font-size:13px;}
+.empty-hist{text-align:center;color:var(--muted);font-size:13px;padding:20px 0;}
+
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:300;align-items:flex-end;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border-radius:18px 18px 0 0;border:1px solid var(--border);border-bottom:none;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));width:100%;max-width:480px;animation:slideUp 0.25s ease;}
+@keyframes slideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
+.modal h2{font-size:16px;font-weight:600;margin-bottom:14px;color:var(--text);}
+.modal label{font-size:12px;color:var(--muted);margin-bottom:5px;display:block;}
+.modal input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:13px;font-size:16px;color:var(--text);outline:none;margin-bottom:14px;-webkit-appearance:none;}
+.modal input:focus{border-color:var(--accent);}
+.modal-btns{display:flex;gap:10px;}
+.btn-cancel{flex:1;padding:13px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:15px;cursor:pointer;}
+.btn-confirm{flex:2;padding:13px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;}
+
+.emoji-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.emoji-pick{font-size:20px;padding:7px 10px;border-radius:10px;background:var(--bg);border:1px solid var(--border);cursor:pointer;}
+.emoji-pick.sel{border-color:var(--accent);background:rgba(124,111,255,0.15);}
 </style>
 </head>
 <body>
@@ -89,36 +143,150 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
   <h1>Aday's Day</h1>
   <div class="date-label" id="dateLabel"></div>
 </header>
+<div class="tabbar">
+  <button class="tab-btn active" id="tab-habits" onclick="switchTab('habits')">Habits</button>
+  <button class="tab-btn" id="tab-rewards" onclick="switchTab('rewards')">Rewards</button>
+  <button class="tab-btn" id="tab-history" onclick="switchTab('history')">History</button>
+</div>
 <div class="main">
-  <div class="avatar-card" id="avatarCard">
-    <canvas id="avatarCanvas" width="160" height="200"></canvas>
-    <div class="avatar-info">
-      <div class="avatar-mood" id="avatarMood">Let's go 💪</div>
-      <div class="avatar-sub" id="avatarSub">Start your quests</div>
-      <div class="chips">
-        <span class="chip morning" id="chip-morning">☀️ Fresh</span>
-        <span class="chip money"   id="chip-money">💸 Paid</span>
-        <span class="chip stretch" id="chip-stretch">🧘 Chill</span>
-        <span class="chip study"   id="chip-study">📖 Smart</span>
-        <span class="chip clean"   id="chip-clean">🚭 Clean</span>
-        <span class="chip glow"    id="chip-glow">✨ Glow</span>
+
+  <!-- HABITS PAGE -->
+  <div class="page active" id="page-habits">
+    <div class="avatar-card" id="avatarCard">
+      <canvas id="avatarCanvas" width="160" height="200"></canvas>
+      <div class="avatar-info">
+        <div class="avatar-mood" id="avatarMood">Let's go 💪</div>
+        <div class="avatar-sub" id="avatarSub">Start your quests</div>
+        <div class="chips">
+          <span class="chip morning" id="chip-morning">☀️ Fresh</span>
+          <span class="chip money"   id="chip-money">💸 Paid</span>
+          <span class="chip stretch" id="chip-stretch">🧘 Chill</span>
+          <span class="chip study"   id="chip-study">📖 Smart</span>
+          <span class="chip clean"   id="chip-clean">🚭 Clean</span>
+          <span class="chip glow"    id="chip-glow">✨ Glow</span>
+        </div>
+        <div class="streak">🔥 <span id="streakVal">0</span> day streak</div>
       </div>
-      <div class="streak">🔥 <span id="streakVal">0</span> day streak</div>
+    </div>
+    <div>
+      <div class="section-header">
+        <span class="section-title">Today's Quests</span>
+      </div>
+      <div class="habits-list" id="habitList"></div>
     </div>
   </div>
-  <div>
-    <div class="section-header">
-      <span class="section-title">Today's Quests</span>
+
+  <!-- REWARDS PAGE -->
+  <div class="page" id="page-rewards">
+    <div class="points-card">
+      <div class="points-val" id="pointsVal">0</div>
+      <div class="points-label">Points</div>
+      <div class="points-hint">Complete all habits in a day → +100 points</div>
     </div>
-    <div class="habits-list" id="habitList"></div>
+    <div>
+      <div class="section-header">
+        <span class="section-title">Reward Shop</span>
+      </div>
+      <div class="rewards-list" id="rewardsList"></div>
+      <div style="margin-top:10px;">
+        <button class="add-reward-btn" onclick="openRewardModal()">+ Add new reward</button>
+      </div>
+    </div>
   </div>
+
+  <!-- HISTORY PAGE -->
+  <div class="page" id="page-history">
+    <div>
+      <div class="section-header">
+        <span class="section-title">Redemption History</span>
+      </div>
+      <div class="history-list" id="historyList"></div>
+    </div>
+  </div>
+
 </div>
 <canvas class="confetti-overlay" id="confettiCanvas"></canvas>
+
+<!-- Add/Edit Reward Modal -->
+<div class="modal-overlay" id="rewardModalOverlay" onclick="if(event.target===this)closeRewardModal()">
+  <div class="modal">
+    <h2 id="rewardModalTitle">New Reward</h2>
+    <div class="emoji-row" id="emojiRow"></div>
+    <label>Reward name</label>
+    <input id="rewardNameInput" type="text" placeholder="e.g. YouTube 1 hour" maxlength="40" autocomplete="off" />
+    <label>Cost (points)</label>
+    <input id="rewardCostInput" type="number" inputmode="numeric" placeholder="e.g. 100" min="1" />
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeRewardModal()">Cancel</button>
+      <button class="btn-confirm" onclick="confirmRewardSave()">Save</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const STORAGE_KEY='adayHabits_v3';
 const STREAK_KEY='adayStreak_v3';
+const POINTS_KEY='adayPoints_v1';
+const REWARDS_KEY='adayRewards_v1';
+const HISTORY_KEY='adayHistory_v1';
+const POINTS_AWARDED_KEY='adayPointsAwarded_v1'; // tracks which dates already got their 100pt bonus
 const TODAY=new Date().toDateString();
+
+const DEFAULT_REWARDS=[
+  {id:'r1',icon:'📺',name:'YouTube 1 hour',cost:100},
+  {id:'r2',icon:'🎮',name:'Gaming 1 hour',cost:100},
+  {id:'r3',icon:'🍕',name:'Treat meal',cost:150},
+  {id:'r4',icon:'😴',name:'Sleep in / lazy morning',cost:200},
+];
+
+const EMOJI_CHOICES=['🎁','📺','🎮','🍕','🍔','☕','🛍️','😴','🎬','🎵','🍫','🛌','🚗','✈️','📱','💆'];
+
+let state={};
+let streak=0;
+let confettiActive=false;
+let points=0;
+let rewards=[];
+let history=[];
+let editingRewardId=null;
+let selectedEmoji=EMOJI_CHOICES[0];
+
+function switchTab(name){
+  ['habits','rewards','history'].forEach(t=>{
+    document.getElementById('tab-'+t).classList.toggle('active',t===name);
+    document.getElementById('page-'+t).classList.toggle('active',t===name);
+  });
+  if(name==='rewards')renderRewards();
+  if(name==='history')renderHistory();
+}
+
+function loadPointsData(){
+  try{ points=parseInt(localStorage.getItem(POINTS_KEY)||'0',10)||0; }catch(e){ points=0; }
+  try{
+    const raw=localStorage.getItem(REWARDS_KEY);
+    rewards = raw ? JSON.parse(raw) : DEFAULT_REWARDS.slice();
+    if(!raw) localStorage.setItem(REWARDS_KEY, JSON.stringify(rewards));
+  }catch(e){ rewards=DEFAULT_REWARDS.slice(); }
+  try{
+    const raw=localStorage.getItem(HISTORY_KEY);
+    history = raw ? JSON.parse(raw) : [];
+  }catch(e){ history=[]; }
+}
+
+function savePoints(){ try{ localStorage.setItem(POINTS_KEY, String(points)); }catch(e){} }
+function saveRewards(){ try{ localStorage.setItem(REWARDS_KEY, JSON.stringify(rewards)); }catch(e){} }
+function saveHistory(){ try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }catch(e){} }
+
+function maybeAwardDailyPoints(){
+  const allDone=HABITS.every(h=>state[h.id]);
+  if(!allDone)return;
+  let awardedDates=[];
+  try{ awardedDates=JSON.parse(localStorage.getItem(POINTS_AWARDED_KEY)||'[]'); }catch(e){}
+  if(awardedDates.includes(TODAY))return; // already awarded today
+  points+=100;
+  awardedDates.push(TODAY);
+  try{ localStorage.setItem(POINTS_AWARDED_KEY, JSON.stringify(awardedDates)); }catch(e){}
+  savePoints();
+}
 
 const HABITS=[
   {id:'morning',icon:'☀️',name:'Morning routine',desc:'Wake up fresh, start strong',type:'morning'},
@@ -128,10 +296,6 @@ const HABITS=[
   {id:'clean',  icon:'🚭',name:'No nicotine',      desc:'Stay clean today',          type:'clean'},
   {id:'glow',   icon:'✨',name:'Private habit',    desc:'···',                       type:'glow'},
 ];
-
-let state={};
-let streak=0;
-let confettiActive=false;
 
 function load(){
   try{
@@ -169,6 +333,7 @@ function toggle(id){
       const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
       streak=(sk.last===yesterday.toDateString())?sk.streak+1:1;
     }
+    maybeAwardDailyPoints();
     fireConfetti();
   }
   save();render();
@@ -411,7 +576,136 @@ function drawAvatar(t){
   }
 }
 
-// CONFETTI
+// ── REWARDS ──────────────────────────────────────────────
+function renderRewards(){
+  document.getElementById('pointsVal').textContent=points;
+  const list=document.getElementById('rewardsList');
+  list.innerHTML='';
+  if(!rewards.length){
+    list.innerHTML='<div class="empty-hist">No rewards yet — add one below</div>';
+    return;
+  }
+  rewards.forEach(r=>{
+    const canAfford = points>=r.cost;
+    const el=document.createElement('div');
+    el.className='reward-item';
+    el.innerHTML=`
+      <div class="reward-icon">${r.icon}</div>
+      <div class="reward-text">
+        <div class="reward-name">${r.name}</div>
+        <div class="reward-cost">${r.cost} pts</div>
+      </div>
+      <div class="reward-actions">
+        <button class="btn-redeem" ${canAfford?'':'disabled'} onclick="redeemReward('${r.id}')">Redeem</button>
+        <button class="btn-edit" onclick="openRewardModal('${r.id}')">✎</button>
+        <button class="btn-del" onclick="deleteReward('${r.id}')">✕</button>
+      </div>
+    `;
+    list.appendChild(el);
+  });
+}
+
+function redeemReward(id){
+  const r=rewards.find(r=>r.id===id);
+  if(!r||points<r.cost)return;
+  points-=r.cost;
+  savePoints();
+  history.unshift({id:'h'+Date.now(),name:r.name,icon:r.icon,cost:r.cost,date:new Date().toISOString()});
+  saveHistory();
+  renderRewards();
+  fireConfetti();
+}
+
+function deleteReward(id){
+  rewards=rewards.filter(r=>r.id!==id);
+  saveRewards();
+  renderRewards();
+}
+
+function openRewardModal(id){
+  editingRewardId=id||null;
+  const titleEl=document.getElementById('rewardModalTitle');
+  const nameInput=document.getElementById('rewardNameInput');
+  const costInput=document.getElementById('rewardCostInput');
+
+  if(id){
+    const r=rewards.find(r=>r.id===id);
+    titleEl.textContent='Edit Reward';
+    nameInput.value=r.name;
+    costInput.value=r.cost;
+    selectedEmoji=r.icon;
+  } else {
+    titleEl.textContent='New Reward';
+    nameInput.value='';
+    costInput.value='';
+    selectedEmoji=EMOJI_CHOICES[0];
+  }
+
+  const emojiRow=document.getElementById('emojiRow');
+  emojiRow.innerHTML='';
+  EMOJI_CHOICES.forEach(e=>{
+    const btn=document.createElement('button');
+    btn.type='button';
+    btn.className='emoji-pick'+(e===selectedEmoji?' sel':'');
+    btn.textContent=e;
+    btn.onclick=()=>{
+      selectedEmoji=e;
+      document.querySelectorAll('.emoji-pick').forEach(b=>b.classList.remove('sel'));
+      btn.classList.add('sel');
+    };
+    emojiRow.appendChild(btn);
+  });
+
+  document.getElementById('rewardModalOverlay').classList.add('open');
+  setTimeout(()=>nameInput.focus(),300);
+}
+
+function closeRewardModal(){
+  document.getElementById('rewardModalOverlay').classList.remove('open');
+  editingRewardId=null;
+}
+
+function confirmRewardSave(){
+  const name=document.getElementById('rewardNameInput').value.trim();
+  const cost=parseInt(document.getElementById('rewardCostInput').value,10);
+  if(!name||!cost||cost<1)return;
+
+  if(editingRewardId){
+    const r=rewards.find(r=>r.id===editingRewardId);
+    if(r){ r.name=name; r.cost=cost; r.icon=selectedEmoji; }
+  } else {
+    rewards.push({id:'r'+Date.now(),icon:selectedEmoji,name,cost});
+  }
+  saveRewards();
+  closeRewardModal();
+  renderRewards();
+}
+
+// ── HISTORY ──────────────────────────────────────────────
+function renderHistory(){
+  const list=document.getElementById('historyList');
+  list.innerHTML='';
+  if(!history.length){
+    list.innerHTML='<div class="empty-hist">No redemptions yet</div>';
+    return;
+  }
+  history.forEach(h=>{
+    const d=new Date(h.date);
+    const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const dateStr=`${months[d.getMonth()]} ${d.getDate()}, ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    const el=document.createElement('div');
+    el.className='history-item';
+    el.innerHTML=`
+      <div>
+        <div class="history-name">${h.icon} ${h.name}</div>
+        <div class="history-meta">${dateStr}</div>
+      </div>
+      <div class="history-cost">-${h.cost}</div>
+    `;
+    list.appendChild(el);
+  });
+}
+
 function fireConfetti(){
   if(confettiActive)return;confettiActive=true;
   const canvas=document.getElementById('confettiCanvas');
@@ -441,7 +735,7 @@ function fireConfetti(){
 }
 
 function loop(t){drawAvatar(t);requestAnimationFrame(loop);}
-load();render();requestAnimationFrame(loop);
+load();loadPointsData();render();requestAnimationFrame(loop);
 </script>
 </body>
 </html>
