@@ -166,6 +166,13 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
           <span class="chip glow"    id="chip-glow">✨ Glow</span>
         </div>
         <div class="streak">🔥 <span id="streakVal">0</span> day streak</div>
+        <div id="levelBadge" style="display:inline-flex;align-items:center;margin-top:6px;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);color:#888;letter-spacing:0.3px;">Lv.1 Beginner</div>
+        <div style="margin-top:6px;">
+          <div style="height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;">
+            <div id="xpBarFill" style="height:100%;width:0%;border-radius:2px;transition:width 0.5s ease;background:#888;"></div>
+          </div>
+          <div id="xpBarLabel" style="font-size:10px;color:var(--muted);margin-top:3px;">0/100 XP to Lv.2</div>
+        </div>
       </div>
     </div>
     <div>
@@ -230,6 +237,8 @@ const POINTS_KEY='adayPoints_v1';
 const REWARDS_KEY='adayRewards_v1';
 const HISTORY_KEY='adayHistory_v1';
 const POINTS_AWARDED_KEY='adayPointsAwarded_v1'; // tracks which dates already got their 100pt bonus
+const PENALIZED_KEY='adayPenalized_v1'; // tracks which missed dates already got penalized
+const PENALTY_AMOUNT=50;
 const TODAY=new Date().toDateString();
 
 const DEFAULT_REWARDS=[
@@ -245,10 +254,37 @@ let state={};
 let streak=0;
 let confettiActive=false;
 let points=0;
+let lifetimeXP=0;
 let rewards=[];
 let history=[];
 let editingRewardId=null;
 let selectedEmoji=EMOJI_CHOICES[0];
+let pendingPenaltyNotice=null;
+
+const LIFETIME_XP_KEY='adayLifetimeXP_v1';
+const LEVEL_THRESHOLDS=[0,100,250,500,1000,2000,4000];
+// L1=0, L2=100, L3=250, L4=500, L5=1000, L6=2000, L7=4000
+
+function getLevel(xp){
+  let lvl=1;
+  for(let i=1;i<LEVEL_THRESHOLDS.length;i++){
+    if(xp>=LEVEL_THRESHOLDS[i])lvl=i+1; else break;
+  }
+  return lvl;
+}
+
+function getLevelProgress(xp){
+  const lvl=getLevel(xp);
+  const idx=lvl-1;
+  const current=LEVEL_THRESHOLDS[idx]||0;
+  const next=LEVEL_THRESHOLDS[idx+1];
+  if(!next)return{lvl,pct:100,current:xp,needed:0}; // max level
+  const pct=Math.round(((xp-current)/(next-current))*100);
+  return{lvl,pct,current:xp-current,needed:next-current};
+}
+
+const LEVEL_NAMES=['','Beginner','Trainee','Warrior','Champion','Legend','Mythic','God Mode'];
+const LEVEL_COLORS=['','#888','#60a5fa','#4ade80','#a78bfa','#f5c842','#f472b6','#fff'];
 
 function switchTab(name){
   ['habits','rewards','history'].forEach(t=>{
@@ -261,6 +297,7 @@ function switchTab(name){
 
 function loadPointsData(){
   try{ points=parseInt(localStorage.getItem(POINTS_KEY)||'0',10)||0; }catch(e){ points=0; }
+  try{ lifetimeXP=parseInt(localStorage.getItem(LIFETIME_XP_KEY)||'0',10)||0; }catch(e){ lifetimeXP=0; }
   try{
     const raw=localStorage.getItem(REWARDS_KEY);
     rewards = raw ? JSON.parse(raw) : DEFAULT_REWARDS.slice();
@@ -272,7 +309,10 @@ function loadPointsData(){
   }catch(e){ history=[]; }
 }
 
-function savePoints(){ try{ localStorage.setItem(POINTS_KEY, String(points)); }catch(e){} }
+function savePoints(){
+  try{ localStorage.setItem(POINTS_KEY, String(points)); }catch(e){}
+  try{ localStorage.setItem(LIFETIME_XP_KEY, String(lifetimeXP)); }catch(e){}
+}
 function saveRewards(){ try{ localStorage.setItem(REWARDS_KEY, JSON.stringify(rewards)); }catch(e){} }
 function saveHistory(){ try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }catch(e){} }
 
@@ -281,8 +321,12 @@ function maybeAwardDailyPoints(){
   if(!allDone)return;
   let awardedDates=[];
   try{ awardedDates=JSON.parse(localStorage.getItem(POINTS_AWARDED_KEY)||'[]'); }catch(e){}
-  if(awardedDates.includes(TODAY))return; // already awarded today
+  if(awardedDates.includes(TODAY))return;
+  const prevLevel=getLevel(lifetimeXP);
   points+=100;
+  lifetimeXP+=100; // XP always goes up, never down
+  const newLevel=getLevel(lifetimeXP);
+  if(newLevel>prevLevel) showLevelUpBanner(newLevel);
   awardedDates.push(TODAY);
   try{ localStorage.setItem(POINTS_AWARDED_KEY, JSON.stringify(awardedDates)); }catch(e){}
   savePoints();
@@ -307,13 +351,33 @@ function load(){
         const allDone=HABITS.every(h=>d.state[h.id]);
         const sk=JSON.parse(localStorage.getItem(STREAK_KEY)||'{"streak":0,"last":""}');
         const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
-        streak=(allDone&&sk.last===yesterday.toDateString())?sk.streak+1:allDone?1:0;
+
+        if(!allDone){
+          // missed day — apply penalty once per missed date, streak resets
+          applyMissedDayPenalty(d.date);
+          streak=0;
+        } else {
+          streak=(sk.last===yesterday.toDateString())?sk.streak+1:1;
+        }
         state={};save();
       }
     }
     const sk=JSON.parse(localStorage.getItem(STREAK_KEY)||'{"streak":0}');
     if(!streak)streak=sk.streak||0;
   }catch(e){state={};}
+}
+
+function applyMissedDayPenalty(missedDate){
+  // missedDate = the date string of the day that just ended incomplete
+  let penalizedDates=[];
+  try{ penalizedDates=JSON.parse(localStorage.getItem(PENALIZED_KEY)||'[]'); }catch(e){}
+  if(penalizedDates.includes(missedDate))return; // already penalized for this date
+  loadPointsData(); // ensure points/rewards are loaded before adjusting
+  points=Math.max(0, points-PENALTY_AMOUNT);
+  savePoints();
+  penalizedDates.push(missedDate);
+  try{ localStorage.setItem(PENALIZED_KEY, JSON.stringify(penalizedDates)); }catch(e){}
+  pendingPenaltyNotice={date:missedDate,amount:PENALTY_AMOUNT};
 }
 
 function save(){
@@ -361,6 +425,25 @@ function render(){
   });
   document.getElementById('streakVal').textContent=streak;
 
+  // Level badge
+  const {lvl,pct,current,needed}=getLevelProgress(lifetimeXP);
+  const lvlColor=LEVEL_COLORS[Math.min(lvl,LEVEL_COLORS.length-1)];
+  const lvlName=LEVEL_NAMES[Math.min(lvl,LEVEL_NAMES.length-1)];
+  document.getElementById('levelBadge').textContent=`Lv.${lvl} ${lvlName}`;
+  document.getElementById('levelBadge').style.color=lvlColor;
+  document.getElementById('levelBadge').style.borderColor=lvlColor+'44';
+  document.getElementById('levelBadge').style.background=lvlColor+'12';
+  const xpBar=document.getElementById('xpBarFill');
+  xpBar.style.width=pct+'%';
+  xpBar.style.background=lvlColor;
+  document.getElementById('xpBarLabel').textContent= needed>0 ? `${current}/${needed} XP to Lv.${lvl+1}` : '★ Max Level';
+
+  // Penalty notice
+  if(pendingPenaltyNotice){
+    showPenaltyBanner(pendingPenaltyNotice.amount);
+    pendingPenaltyNotice=null;
+  }
+
   const done=HABITS.filter(h=>state[h.id]).length;
   const moods=['💀 Dead...','😢 Rough day','😐 Meh','🙂 Getting there','😄 Strong!','🌟 Legendary!'];
   const subs=['Do at least one thing bro','Keep going, one more','Halfway there','Almost strong','One more quest!','Perfect day. Glory!'];
@@ -380,6 +463,31 @@ function render(){
   });
 }
 
+function showLevelUpBanner(lvl){
+  const color=LEVEL_COLORS[Math.min(lvl,LEVEL_COLORS.length-1)];
+  const name=LEVEL_NAMES[Math.min(lvl,LEVEL_NAMES.length-1)];
+  showBanner(`🎉 Level Up! You are now Lv.${lvl} ${name}`,color);
+}
+
+function showPenaltyBanner(amount){
+  showBanner(`😤 -${amount} pts — missed yesterday. Don't slip again!`,'#f87171');
+}
+
+function showBanner(msg, color){
+  let b=document.getElementById('toastBanner');
+  if(!b){
+    b=document.createElement('div');
+    b.id='toastBanner';
+    b.style.cssText='position:fixed;top:env(safe-area-inset-top,16px);left:50%;transform:translateX(-50%);z-index:500;padding:12px 20px;border-radius:14px;font-size:14px;font-weight:600;color:#fff;text-align:center;max-width:90%;transition:opacity 0.4s;pointer-events:none;';
+    document.body.appendChild(b);
+  }
+  b.textContent=msg;
+  b.style.background=color||'#7c6fff';
+  b.style.opacity='1';
+  clearTimeout(b._timer);
+  b._timer=setTimeout(()=>b.style.opacity='0',3500);
+}
+
 // ── PIXEL AVATAR ──────────────────────────────────────────
 const S=10;
 function drawAvatar(t){
@@ -389,12 +497,23 @@ function drawAvatar(t){
   ctx.imageSmoothingEnabled=false;
 
   const moodIdx=getMoodIdx();
+  const lvl=getLevel(lifetimeXP);
   const morning=!!state['morning'],money=!!state['money'],stretch=!!state['stretch'];
   const study=!!state['study'],clean=!!state['clean'],glow=!!state['glow'];
 
   function px(x,y,w,h,c,a){ctx.globalAlpha=a??1;ctx.fillStyle=c;ctx.fillRect(x*S,y*S,(w||1)*S,(h||1)*S);ctx.globalAlpha=1;}
 
-  // glow aura
+  // L6+ permanent legendary aura (independent of glow habit)
+  if(lvl>=6){
+    const a=0.15+0.08*Math.sin(t/600);
+    const g=ctx.createRadialGradient(canvas.width/2,canvas.height*0.36,2,canvas.width/2,canvas.height*0.36,canvas.width*0.6);
+    const auraColor=lvl>=7?`rgba(255,255,255,${a})`:`rgba(245,200,66,${a})`;
+    g.addColorStop(0,auraColor);
+    g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+
+  // private habit glow (pink/purple)
   if(glow){
     const a=0.2+0.1*Math.sin(t/500);
     const g=ctx.createRadialGradient(canvas.width/2,canvas.height*0.36,2,canvas.width/2,canvas.height*0.36,canvas.width*0.55);
@@ -420,13 +539,22 @@ function drawAvatar(t){
   px(3,0,10,1,OL);px(2,1,12,1,OL);
   px(1,2,14,9,OL);px(2,11,12,1,OL);px(3,12,10,1,OL);
 
-  // HAIR
-  const H1='#1c1208',H2='#2a1c0e',H3='#382810';
+  // HAIR — base dark, with level-based highlights
+  const H1='#1c1208';
+  const H2= lvl>=5?'#c09820': lvl>=4?'#4a6aaa': lvl>=3?'#3a4a7a':'#2a1c0e';
+  const H3= lvl>=5?'#f0c040': lvl>=4?'#6080cc': lvl>=3?'#5060a0':'#382810';
   px(3,0,10,1,H1);px(2,1,12,1,H1);
   px(1,2,14,4,H1);
   px(1,6,2,4,H1);px(13,6,2,4,H1);
   px(1,9,1,2,H1);px(14,9,1,2,H1);
   px(5,1,4,1,H3);px(4,2,3,1,H3);px(7,1,1,2,H2);px(11,2,2,1,H2);
+  // L6+ glowing crown hint
+  if(lvl>=6){
+    const ca=0.6+0.4*Math.sin(t/400);
+    ctx.fillStyle=lvl>=7?'#fff':'#f0c040'; ctx.globalAlpha=ca;
+    ctx.fillRect(6*S,0,S,3); ctx.fillRect(9*S,0,S,3);
+    ctx.globalAlpha=1;
+  }
 
   // SKIN
   const sk0=moodIdx===0?'#b08060':moodIdx===1?'#c89868':'#eaab70';
@@ -516,28 +644,40 @@ function drawAvatar(t){
   // NECK
   px(6,13,4,1,sk0);
 
+  // OUTFIT — shirt/hoodie/jacket changes by level
+  // L1-2: white tee, L3: dark tee, L4: hoodie (navy), L5: jacket (deep purple), L6+: golden trim jacket
+  const outfitMain = lvl>=6?'#2a2010': lvl>=5?'#1e1030': lvl>=4?'#1a2040': lvl>=3?'#2a2a3a':'#eeeef5';
+  const outfitSide = lvl>=6?'#1a1208': lvl>=5?'#140820': lvl>=4?'#101828': lvl>=3?'#1a1a28':'#c6c6d6';
+  const outfitBot  = lvl>=6?'#100e06': lvl>=5?'#0e0618': lvl>=4?'#0a1018': lvl>=3?'#111120':'#a6a6ba';
+  const outfitTrim = lvl>=6?'#f0c040': lvl>=5?'#7c3aed': lvl>=4?'#3b82f6': null;
+
   // BODY OUTLINE
   px(2,13,12,1,OL);px(1,14,14,6,OL);px(2,20,12,1,OL);
-
-  // SHIRT
-  const sh='#eeeef5',shS='#c6c6d6',shSS='#a6a6ba';
-  px(3,14,10,5,sh);
-  px(2,14,1,5,shS);px(13,14,1,5,shS);
-  px(3,18,10,1,shSS);
-  px(6,13,4,2,sh);px(7,13,2,1,shS);
-  px(7,16,2,1,shS);
+  // shirt fill
+  px(3,14,10,5,outfitMain);
+  px(2,14,1,5,outfitSide);px(13,14,1,5,outfitSide);
+  px(3,18,10,1,outfitBot);
+  // collar
+  px(6,13,4,2,outfitMain);px(7,13,2,1,outfitSide);
+  // fold
+  px(7,16,2,1,outfitSide);
+  // trim/stripe for higher levels
+  if(outfitTrim){
+    px(3,14,1,5,outfitTrim,0.6); // left stripe
+    px(12,14,1,5,outfitTrim,0.6); // right stripe
+  }
 
   // ARMS
   if(stretch){
     px(0,14,1,5,OL);px(15,14,1,5,OL);
-    px(0,15,1,3,sh);px(15,15,1,3,sh);
+    px(0,15,1,3,outfitMain);px(15,15,1,3,outfitMain);
     px(0,18,1,1,sk0);px(15,18,1,1,sk0);
   } else {
     px(0,14,1,4,OL);px(15,14,1,4,OL);
-    px(0,15,1,2,sh);px(15,15,1,2,sh);
+    px(0,15,1,2,outfitMain);px(15,15,1,2,outfitMain);
     px(0,17,1,1,sk0);px(15,17,1,1,sk0);
   }
-  if(moodIdx<=1){px(0,16,1,2,shSS);px(15,16,1,2,shSS);}
+  if(moodIdx<=1){px(0,16,1,2,outfitSide);px(15,16,1,2,outfitSide);}
 
   // PANTS
   px(2,20,12,1,OL);
@@ -579,6 +719,17 @@ function drawAvatar(t){
 // ── REWARDS ──────────────────────────────────────────────
 function renderRewards(){
   document.getElementById('pointsVal').textContent=points;
+  const {lvl,pct,needed}=getLevelProgress(lifetimeXP);
+  const lvlName=LEVEL_NAMES[Math.min(lvl,LEVEL_NAMES.length-1)];
+  const lvlColor=LEVEL_COLORS[Math.min(lvl,LEVEL_COLORS.length-1)];
+  const existingInfo=document.getElementById('rewardsLevelInfo');
+  if(existingInfo) existingInfo.remove();
+  const card=document.querySelector('.points-card');
+  const info=document.createElement('div');
+  info.id='rewardsLevelInfo';
+  info.style.cssText=`margin-top:10px;font-size:13px;font-weight:700;color:${lvlColor};`;
+  info.textContent=`Lv.${lvl} ${lvlName} · ${lifetimeXP} total XP`;
+  card.appendChild(info);
   const list=document.getElementById('rewardsList');
   list.innerHTML='';
   if(!rewards.length){
