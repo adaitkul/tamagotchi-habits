@@ -231,13 +231,168 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
 </div>
 
 <script>
+// ── GITHUB STORAGE CONFIG ────────────────────────────────
+const GH_TOKEN='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';
+const GH_OWNER='adaitkul';
+const GH_REPO='tamagotchi-habits';
+const GH_FILE='progress.json';
+const GH_API=`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}`;
+
+let ghSha=null; // needed for updates
+let saveTimer=null;
+let isSyncing=false;
+
+function showSyncStatus(msg, color){
+  let el=document.getElementById('syncStatus');
+  if(!el){
+    el=document.createElement('div');
+    el.id='syncStatus';
+    el.style.cssText='position:fixed;bottom:calc(12px + env(safe-area-inset-bottom));right:12px;font-size:11px;padding:4px 10px;border-radius:20px;background:rgba(0,0,0,0.6);color:#fff;z-index:400;transition:opacity 0.4s;pointer-events:none;';
+    document.body.appendChild(el);
+  }
+  el.textContent=msg;
+  el.style.color=color||'#aaa';
+  el.style.opacity='1';
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>el.style.opacity='0',2500);
+}
+
+async function ghLoad(){
+  try{
+    showSyncStatus('⏳ Loading...','#aaa');
+    const res=await fetch(GH_API,{
+      headers:{'Authorization':`token ${GH_TOKEN}`,'Accept':'application/vnd.github.v3+json'}
+    });
+    if(res.status===404){
+      // first time — no file yet, start fresh
+      showSyncStatus('✓ Ready','#4ade80');
+      return null;
+    }
+    if(!res.ok) throw new Error('Load failed: '+res.status);
+    const json=await res.json();
+    ghSha=json.sha;
+    const data=JSON.parse(atob(json.content.replace(/\n/g,'')));
+    showSyncStatus('✓ Synced','#4ade80');
+    return data;
+  }catch(e){
+    showSyncStatus('⚠ Offline','#f87171');
+    console.error('ghLoad error',e);
+    return null;
+  }
+}
+
+async function ghSave(data){
+  if(isSyncing)return;
+  isSyncing=true;
+  try{
+    showSyncStatus('💾 Saving...','#f5c842');
+    const content=btoa(unescape(encodeURIComponent(JSON.stringify(data,null,2))));
+    const body={message:'progress update',content};
+    if(ghSha) body.sha=ghSha;
+    const res=await fetch(GH_API,{
+      method:'PUT',
+      headers:{'Authorization':`token ${GH_TOKEN}`,'Accept':'application/vnd.github.v3+json','Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error('Save failed: '+res.status);
+    const json=await res.json();
+    ghSha=json.content.sha;
+    showSyncStatus('✓ Saved','#4ade80');
+  }catch(e){
+    showSyncStatus('⚠ Save failed','#f87171');
+    console.error('ghSave error',e);
+  }finally{
+    isSyncing=false;
+  }
+}
+
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>ghSave(buildSaveData()),800);
+}
+
+function buildSaveData(){
+  return{
+    version:1,
+    lastSaved:new Date().toISOString(),
+    habits:{date:TODAY,state},
+    streak:{streak,last:localStorage.getItem('_streakLast')||''},
+    points,
+    lifetimeXP,
+    rewards,
+    history,
+    awardedDates:JSON.parse(localStorage.getItem(POINTS_AWARDED_KEY)||'[]'),
+    penalizedDates:JSON.parse(localStorage.getItem(PENALIZED_KEY)||'[]'),
+  };
+}
+
+function applyLoadedData(data){
+  if(!data)return;
+
+  // habits / state
+  if(data.habits){
+    if(data.habits.date===TODAY){
+      state=data.habits.state||{};
+    } else {
+      // day rolled over
+      const prevState=data.habits.state||{};
+      const allDone=HABITS.every(h=>prevState[h.id]);
+      const noneDone=HABITS.every(h=>!prevState[h.id]);
+      const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
+      const lastStreak=data.streak||{streak:0,last:''};
+
+      if(noneDone){
+        applyPenaltyFromData(data.habits.date, data);
+        streak=0;
+      } else if(allDone){
+        streak=(lastStreak.last===yesterday.toDateString())?lastStreak.streak+1:1;
+      } else {
+        streak=0;
+      }
+      state={};
+    }
+  }
+
+  // streak
+  if(data.habits&&data.habits.date!==TODAY){
+    // already handled above
+  } else if(data.streak){
+    streak=data.streak.streak||0;
+    localStorage.setItem('_streakLast',data.streak.last||'');
+  }
+
+  // points & XP
+  points=data.points||0;
+  lifetimeXP=data.lifetimeXP||0;
+
+  // rewards
+  rewards=data.rewards&&data.rewards.length?data.rewards:DEFAULT_REWARDS.slice();
+
+  // history
+  history=data.history||[];
+
+  // awarded/penalized dates back to localStorage for quick checks
+  if(data.awardedDates) localStorage.setItem(POINTS_AWARDED_KEY,JSON.stringify(data.awardedDates));
+  if(data.penalizedDates) localStorage.setItem(PENALIZED_KEY,JSON.stringify(data.penalizedDates));
+}
+
+function applyPenaltyFromData(missedDate, data){
+  const penalizedDates=data.penalizedDates||[];
+  if(penalizedDates.includes(missedDate))return;
+  points=Math.max(0,(data.points||0)-PENALTY_AMOUNT);
+  penalizedDates.push(missedDate);
+  localStorage.setItem(PENALIZED_KEY,JSON.stringify(penalizedDates));
+  pendingPenaltyNotice={date:missedDate,amount:PENALTY_AMOUNT};
+}
+
+// ── STORAGE KEYS (kept for awarded/penalized quick checks) ─
 const STORAGE_KEY='adayHabits_v3';
 const STREAK_KEY='adayStreak_v3';
 const POINTS_KEY='adayPoints_v1';
 const REWARDS_KEY='adayRewards_v1';
 const HISTORY_KEY='adayHistory_v1';
-const POINTS_AWARDED_KEY='adayPointsAwarded_v1'; // tracks which dates already got their 100pt bonus
-const PENALIZED_KEY='adayPenalized_v1'; // tracks which missed dates already got penalized
+const POINTS_AWARDED_KEY='adayPointsAwarded_v1';
+const PENALIZED_KEY='adayPenalized_v1';
 const PENALTY_AMOUNT=50;
 const TODAY=new Date().toDateString();
 
@@ -296,25 +451,12 @@ function switchTab(name){
 }
 
 function loadPointsData(){
-  try{ points=parseInt(localStorage.getItem(POINTS_KEY)||'0',10)||0; }catch(e){ points=0; }
-  try{ lifetimeXP=parseInt(localStorage.getItem(LIFETIME_XP_KEY)||'0',10)||0; }catch(e){ lifetimeXP=0; }
-  try{
-    const raw=localStorage.getItem(REWARDS_KEY);
-    rewards = raw ? JSON.parse(raw) : DEFAULT_REWARDS.slice();
-    if(!raw) localStorage.setItem(REWARDS_KEY, JSON.stringify(rewards));
-  }catch(e){ rewards=DEFAULT_REWARDS.slice(); }
-  try{
-    const raw=localStorage.getItem(HISTORY_KEY);
-    history = raw ? JSON.parse(raw) : [];
-  }catch(e){ history=[]; }
+  // data already applied via applyLoadedData on boot — this is a no-op now
 }
 
-function savePoints(){
-  try{ localStorage.setItem(POINTS_KEY, String(points)); }catch(e){}
-  try{ localStorage.setItem(LIFETIME_XP_KEY, String(lifetimeXP)); }catch(e){}
-}
-function saveRewards(){ try{ localStorage.setItem(REWARDS_KEY, JSON.stringify(rewards)); }catch(e){} }
-function saveHistory(){ try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }catch(e){} }
+function savePoints(){ scheduleSave(); }
+function saveRewards(){ scheduleSave(); }
+function saveHistory(){ scheduleSave(); }
 
 function maybeAwardDailyPoints(){
   const allDone=HABITS.every(h=>state[h.id]);
@@ -324,12 +466,12 @@ function maybeAwardDailyPoints(){
   if(awardedDates.includes(TODAY))return;
   const prevLevel=getLevel(lifetimeXP);
   points+=100;
-  lifetimeXP+=100; // XP always goes up, never down
+  lifetimeXP+=100;
   const newLevel=getLevel(lifetimeXP);
   if(newLevel>prevLevel) showLevelUpBanner(newLevel);
   awardedDates.push(TODAY);
-  try{ localStorage.setItem(POINTS_AWARDED_KEY, JSON.stringify(awardedDates)); }catch(e){}
-  savePoints();
+  localStorage.setItem(POINTS_AWARDED_KEY,JSON.stringify(awardedDates));
+  scheduleSave();
 }
 
 const HABITS=[
@@ -342,55 +484,22 @@ const HABITS=[
 ];
 
 function load(){
-  try{
-    const raw=localStorage.getItem(STORAGE_KEY);
-    if(raw){
-      const d=JSON.parse(raw);
-      if(d.date===TODAY){state=d.state;}
-      else{
-        const allDone=HABITS.every(h=>d.state[h.id]);
-        const noneDone=HABITS.every(h=>!d.state[h.id]); // truly skipped — 0 habits
-        const sk=JSON.parse(localStorage.getItem(STREAK_KEY)||'{"streak":0,"last":""}');
-        const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
-
-        if(noneDone){
-          // truly skipped — penalty + streak reset
-          applyMissedDayPenalty(d.date);
-          streak=0;
-        } else if(allDone){
-          // perfect day — extend streak
-          streak=(sk.last===yesterday.toDateString())?sk.streak+1:1;
-        } else {
-          // partial day — streak resets but no point penalty
-          streak=0;
-        }
-        state={};save();
-      }
-    }
-    const sk=JSON.parse(localStorage.getItem(STREAK_KEY)||'{"streak":0}');
-    if(!streak)streak=sk.streak||0;
-  }catch(e){state={};}
+  // no-op — loading is async via ghLoad on boot
 }
 
 function applyMissedDayPenalty(missedDate){
-  // missedDate = the date string of the day that just ended incomplete
   let penalizedDates=[];
   try{ penalizedDates=JSON.parse(localStorage.getItem(PENALIZED_KEY)||'[]'); }catch(e){}
-  if(penalizedDates.includes(missedDate))return; // already penalized for this date
-  loadPointsData(); // ensure points/rewards are loaded before adjusting
-  points=Math.max(0, points-PENALTY_AMOUNT);
-  savePoints();
+  if(penalizedDates.includes(missedDate))return;
+  points=Math.max(0,points-PENALTY_AMOUNT);
   penalizedDates.push(missedDate);
-  try{ localStorage.setItem(PENALIZED_KEY, JSON.stringify(penalizedDates)); }catch(e){}
+  localStorage.setItem(PENALIZED_KEY,JSON.stringify(penalizedDates));
   pendingPenaltyNotice={date:missedDate,amount:PENALTY_AMOUNT};
+  scheduleSave();
 }
 
 function save(){
-  try{
-    localStorage.setItem(STORAGE_KEY,JSON.stringify({date:TODAY,state}));
-    if(HABITS.every(h=>state[h.id]))
-      localStorage.setItem(STREAK_KEY,JSON.stringify({streak,last:TODAY}));
-  }catch(e){}
+  scheduleSave();
 }
 
 function toggle(id){
@@ -891,7 +1000,18 @@ function fireConfetti(){
 }
 
 function loop(t){drawAvatar(t);requestAnimationFrame(loop);}
-load();loadPointsData();render();requestAnimationFrame(loop);
+
+// ── BOOT ─────────────────────────────────────────────────
+(async()=>{
+  rewards=DEFAULT_REWARDS.slice(); // show something while loading
+  render();
+  requestAnimationFrame(loop);
+  const data=await ghLoad();
+  applyLoadedData(data);
+  loadPointsData(); // no-op but keeps flow clear
+  render();
+  renderRewards();
+})();
 </script>
 </body>
 </html>
