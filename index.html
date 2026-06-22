@@ -349,15 +349,20 @@ function load(){
       if(d.date===TODAY){state=d.state;}
       else{
         const allDone=HABITS.every(h=>d.state[h.id]);
+        const noneDone=HABITS.every(h=>!d.state[h.id]); // truly skipped — 0 habits
         const sk=JSON.parse(localStorage.getItem(STREAK_KEY)||'{"streak":0,"last":""}');
         const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
 
-        if(!allDone){
-          // missed day — apply penalty once per missed date, streak resets
+        if(noneDone){
+          // truly skipped — penalty + streak reset
           applyMissedDayPenalty(d.date);
           streak=0;
-        } else {
+        } else if(allDone){
+          // perfect day — extend streak
           streak=(sk.last===yesterday.toDateString())?sk.streak+1:1;
+        } else {
+          // partial day — streak resets but no point penalty
+          streak=0;
         }
         state={};save();
       }
@@ -470,7 +475,7 @@ function showLevelUpBanner(lvl){
 }
 
 function showPenaltyBanner(amount){
-  showBanner(`😤 -${amount} pts — missed yesterday. Don't slip again!`,'#f87171');
+  showBanner(`😤 -${amount} pts — you skipped yesterday entirely. Don't do that again!`,'#f87171');
 }
 
 function showBanner(msg, color){
