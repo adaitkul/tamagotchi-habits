@@ -81,7 +81,38 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
 .checkmark::after{content:'';display:none;width:5px;height:9px;border-right:2.5px solid #111;border-bottom:2.5px solid #111;transform:rotate(45deg) translate(-1px,-1px);}
 .habit-item.done .checkmark::after{display:block;}
 
-.confetti-overlay{position:fixed;inset:0;pointer-events:none;z-index:200;}
+.habit-item.exercise::before{background:#fb923c;}
+.habit-item.done.exercise{border-color:rgba(251,146,60,0.3);}
+.habit-item.done.exercise .checkmark{background:#fb923c;}
+.chip.exercise.on{background:#fb923c;}
+
+/* Workout player */
+.workout-overlay{display:none;position:fixed;inset:0;background:var(--bg);z-index:600;flex-direction:column;}
+.workout-overlay.open{display:flex;}
+.workout-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;padding-top:calc(16px + env(safe-area-inset-top));border-bottom:1px solid var(--border);}
+.workout-title{font-size:16px;font-weight:700;color:var(--text);}
+.workout-close{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:4px 8px;-webkit-tap-highlight-color:transparent;}
+.workout-body{flex:1;display:flex;flex-direction:column;align-items:center;padding:24px 20px;gap:20px;overflow-y:auto;}
+.exercise-counter{font-size:13px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;}
+.exercise-name{font-size:26px;font-weight:800;color:var(--text);text-align:center;}
+.exercise-detail{font-size:14px;color:var(--muted);text-align:center;}
+.anim-canvas{border-radius:16px;background:var(--surface);border:1px solid var(--border);}
+.timer-ring-wrap{position:relative;display:flex;align-items:center;justify-content:center;}
+.timer-label{position:absolute;font-size:28px;font-weight:800;color:var(--text);}
+.timer-sub{font-size:12px;color:var(--muted);margin-top:4px;text-align:center;}
+.set-dots{display:flex;gap:8px;justify-content:center;}
+.set-dot{width:10px;height:10px;border-radius:50%;background:var(--border);transition:background 0.3s;}
+.set-dot.done{background:var(--accent);}
+.set-dot.current{background:var(--gold);}
+.workout-btn{width:100%;max-width:320px;padding:16px;border:none;border-radius:16px;font-size:17px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform 0.1s;}
+.workout-btn:active{transform:scale(0.97);}
+.workout-btn.primary{background:var(--accent);color:#fff;}
+.workout-btn.rest{background:#f59e0b;color:#111;}
+.workout-btn.done-btn{background:#4ade80;color:#111;}
+.workout-progress{width:100%;max-width:320px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
+.workout-progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width 0.3s;}
+.phase-label{font-size:13px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:1px;}
+
 
 /* Tab nav */
 .tabbar{display:flex;background:var(--surface);border-bottom:1px solid var(--border);}
@@ -160,6 +191,7 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
         <div class="chips">
           <span class="chip morning" id="chip-morning">☀️ Fresh</span>
           <span class="chip money"   id="chip-money">💸 Paid</span>
+          <span class="chip exercise" id="chip-exercise">💪 Built</span>
           <span class="chip stretch" id="chip-stretch">🧘 Chill</span>
           <span class="chip study"   id="chip-study">📖 Smart</span>
           <span class="chip clean"   id="chip-clean">🚭 Clean</span>
@@ -213,6 +245,38 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
 
 </div>
 <canvas class="confetti-overlay" id="confettiCanvas"></canvas>
+
+<!-- WORKOUT PLAYER -->
+<div class="workout-overlay" id="workoutOverlay">
+  <div class="workout-header">
+    <button class="workout-close" onclick="closeWorkout()">✕</button>
+    <div class="workout-title" id="workoutTitle">Exercise</div>
+    <div style="width:36px"></div>
+  </div>
+  <div class="workout-body">
+    <div class="exercise-counter" id="exerciseCounter">Exercise 1 of 4</div>
+    <div class="workout-progress"><div class="workout-progress-fill" id="workoutProgressFill" style="width:0%"></div></div>
+    <div class="phase-label" id="phaseLabel">GET READY</div>
+    <div class="exercise-name" id="exerciseName">Push-ups</div>
+    <div class="exercise-detail" id="exerciseDetail">3 sets × 10 reps</div>
+    <img class="anim-canvas" id="workoutGif" src="" alt="" style="display:none;">
+    <div id="exerciseTipCard" style="width:100%;max-width:320px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;font-size:14px;color:var(--text);line-height:1.6;text-align:left;"></div>
+    <div class="timer-ring-wrap">
+      <svg width="120" height="120" id="timerRingSvg">
+        <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="8"/>
+        <circle cx="60" cy="60" r="54" fill="none" stroke="var(--accent)" stroke-width="8"
+          stroke-dasharray="339.3" stroke-dashoffset="0" stroke-linecap="round"
+          transform="rotate(-90 60 60)" id="timerArc"/>
+      </svg>
+      <div>
+        <div class="timer-label" id="timerLabel">Ready</div>
+      </div>
+    </div>
+    <div class="timer-sub" id="timerSub"></div>
+    <div class="set-dots" id="setDots"></div>
+    <button class="workout-btn primary" id="workoutBtn" onclick="workoutAction()">Start</button>
+  </div>
+</div>
 
 <!-- Add/Edit Reward Modal -->
 <div class="modal-overlay" id="rewardModalOverlay" onclick="if(event.target===this)closeRewardModal()">
@@ -334,12 +398,13 @@ function maybeAwardDailyPoints(){
 }
 
 const HABITS=[
-  {id:'morning',icon:'☀️',name:'Morning routine',desc:'Wake up fresh, start strong',type:'morning'},
-  {id:'money',  icon:'💸',name:'Earn 1500 CZK',  desc:'Delivery shift done',       type:'money'},
-  {id:'stretch',icon:'🧘',name:'Stretch / bend',  desc:'Body stays loose',          type:'stretch'},
-  {id:'study',  icon:'📖',name:'2 study sessions',desc:'Knowledge compounds',       type:'study'},
-  {id:'clean',  icon:'🚭',name:'No nicotine',      desc:'Stay clean today',          type:'clean'},
-  {id:'glow',   icon:'✨',name:'Private habit',    desc:'···',                       type:'glow'},
+  {id:'morning', icon:'☀️',name:'Morning routine',  desc:'Wake up fresh, start strong', type:'morning'},
+  {id:'money',   icon:'💸',name:'Earn 1500 CZK',     desc:'Delivery shift done',          type:'money'},
+  {id:'exercise',icon:'💪',name:'Exercise',           desc:'Chest, shoulders & arms',      type:'exercise', workout:true},
+  {id:'stretch', icon:'🧘',name:'Stretch / bend',     desc:'Body stays loose',             type:'stretch',  workout:true},
+  {id:'study',   icon:'📖',name:'2 study sessions',   desc:'Knowledge compounds',          type:'study'},
+  {id:'clean',   icon:'🚭',name:'No nicotine',        desc:'Stay clean today',             type:'clean'},
+  {id:'glow',    icon:'✨',name:'Private habit',       desc:'···',                          type:'glow'},
 ];
 
 function load(){
@@ -457,8 +522,13 @@ function render(){
   HABITS.forEach(h=>{
     const el=document.createElement('div');
     el.className=`habit-item ${h.type}${state[h.id]?' done':''}`;
-    el.onclick=()=>toggle(h.id);
-    el.innerHTML=`<div class="habit-icon">${h.icon}</div><div class="habit-text"><div class="habit-name">${h.name}</div><div class="habit-desc">${h.desc}</div></div><div class="checkmark"></div>`;
+    if(h.workout && !state[h.id]){
+      el.onclick=()=>openWorkout(h.id);
+      el.innerHTML=`<div class="habit-icon">${h.icon}</div><div class="habit-text"><div class="habit-name">${h.name}</div><div class="habit-desc">${h.desc}</div></div><div style="font-size:11px;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:4px 8px;flex-shrink:0;">START</div>`;
+    } else {
+      el.onclick=()=>toggle(h.id);
+      el.innerHTML=`<div class="habit-icon">${h.icon}</div><div class="habit-text"><div class="habit-name">${h.name}</div><div class="habit-desc">${h.desc}</div></div><div class="checkmark"></div>`;
+    }
     list.appendChild(el);
   });
 }
@@ -487,6 +557,264 @@ function showBanner(msg, color){
   clearTimeout(b._timer);
   b._timer=setTimeout(()=>b.style.opacity='0',3500);
 }
+
+// ── WORKOUT DATA ──────────────────────────────────────────
+// GIFs from Wikimedia Commons (permanent, free, no API needed)
+const EXERCISE_PLAN=[
+  {
+    name:'Push-ups',
+    detail:'Chest & triceps',
+    sets:3, reps:10, rest:30,
+    tip:'Keep your body straight like a plank. Lower your chest to the floor.'
+  },
+  {
+    name:'Pike Push-ups',
+    detail:'Shoulders',
+    sets:3, reps:8, rest:30,
+    tip:'Form an inverted V. Lower your head toward the floor between your hands.'
+  },
+  {
+    name:'Tricep Dips',
+    detail:'Use a chair or bed edge',
+    sets:3, reps:10, rest:30,
+    tip:'Fingers forward, elbows back. Lower until arms are at 90°.'
+  },
+  {
+    name:'Diamond Push-ups',
+    detail:'Inner chest & triceps',
+    sets:3, reps:8, rest:30,
+    tip:'Hands together in diamond shape under chest. Elbows stay close to body.'
+  },
+];
+
+const STRETCH_PLAN=[
+  {
+    name:'Upward Salute',
+    detail:'Reach arms high',
+    duration:30,
+    tip:'Stand tall, reach arms overhead. Breathe deeply and feel the stretch.'
+  },
+  {
+    name:'Toe Touch',
+    detail:'Bend forward slowly',
+    duration:30,
+    tip:'Hinge at the hips, knees soft. Let gravity pull you down.'
+  },
+  {
+    name:'Lunge',
+    detail:'Each side — 30s per leg',
+    duration:60,
+    tip:'Front knee over ankle. Back knee lightly touches floor. Switch sides halfway.'
+  },
+  {
+    name:'Upward Dog',
+    detail:'Lift chest up',
+    duration:30,
+    tip:'Arms straight, hips low, chest forward and up. Look slightly upward.'
+  },
+  {
+    name:"Child's Pose",
+    detail:'Rest & breathe',
+    duration:30,
+    tip:'Sit back on heels, arms stretched forward. Breathe into your back.'
+  },
+  {
+    name:'Downward Dog',
+    detail:'Push heels down',
+    duration:30,
+    tip:'Inverted V shape. Press palms flat, try to push heels toward the floor.'
+  },
+  {
+    name:'Wide Leg Bend',
+    detail:'Legs wide, reach down',
+    duration:30,
+    tip:'Feet wide apart, fold forward. Hands on floor or grab ankles.'
+  },
+  {
+    name:'Upward Salute',
+    detail:'Cool down',
+    duration:30,
+    tip:'Take 3 deep breaths. You are done. Great work!'
+  },
+];
+
+// Workout state
+let wk={
+  habitId:null, plan:[], idx:0, setIdx:0,
+  phase:'idle', // idle | prep | active | rest | done
+  timer:null, timeLeft:0, totalTime:0,
+};
+
+function openWorkout(habitId){
+  wk.habitId=habitId;
+  wk.plan=habitId==='exercise'?EXERCISE_PLAN:STRETCH_PLAN;
+  wk.idx=0; wk.setIdx=0; wk.phase='idle';
+  document.getElementById('workoutTitle').textContent=habitId==='exercise'?'💪 Exercise':'🧘 Stretch';
+  document.getElementById('workoutOverlay').classList.add('open');
+  document.body.style.overflow='hidden';
+  loadExercise();
+}
+
+function closeWorkout(){
+  clearInterval(wk.timer);
+  document.getElementById('workoutOverlay').classList.remove('open');
+  document.body.style.overflow='';
+  wk.phase='idle';
+}
+
+function loadExercise(){
+  const ex=wk.plan[wk.idx];
+  const total=wk.plan.length;
+  document.getElementById('exerciseCounter').textContent=`Exercise ${wk.idx+1} of ${total}`;
+  document.getElementById('exerciseName').textContent=ex.name;
+  document.getElementById('workoutProgressFill').style.width=((wk.idx/total)*100)+'%';
+  document.getElementById('workoutGif').src='';
+  document.getElementById('exerciseTipCard').textContent=ex.tip||ex.detail;
+
+  const isStretch=wk.habitId==='stretch';
+  if(isStretch){
+    document.getElementById('exerciseDetail').textContent=ex.detail+' · '+ex.duration+'s';
+    document.getElementById('setDots').innerHTML='';
+    document.getElementById('phaseLabel').textContent='GET READY';
+    document.getElementById('timerSub').textContent=ex.tip||'Hold this pose';
+    setTimerDisplay(ex.duration, ex.duration);
+  } else {
+    document.getElementById('exerciseDetail').textContent=`${ex.sets} sets × ${ex.reps} reps · ${ex.rest}s rest`;
+    renderSetDots(ex);
+    document.getElementById('phaseLabel').textContent='SET '+(wk.setIdx+1)+' OF '+ex.sets;
+    document.getElementById('timerSub').textContent=ex.tip||'';
+    setTimerDisplay(ex.reps+'', -1);
+  }
+
+  const btn=document.getElementById('workoutBtn');
+  btn.textContent='Start'; btn.className='workout-btn primary';
+  wk.phase='idle';
+}
+
+function renderSetDots(ex){
+  const dots=document.getElementById('setDots');
+  dots.innerHTML='';
+  for(let i=0;i<ex.sets;i++){
+    const d=document.createElement('div');
+    d.className='set-dot'+(i<wk.setIdx?' done':i===wk.setIdx?' current':'');
+    dots.appendChild(d);
+  }
+}
+
+function setTimerDisplay(label, timeLeft){
+  document.getElementById('timerLabel').textContent=label;
+  const arc=document.getElementById('timerArc');
+  const pct=timeLeft<0?1:(wk.totalTime>0?timeLeft/wk.totalTime:1);
+  arc.style.strokeDashoffset=(339.3*(1-pct))+'';
+  arc.style.stroke=timeLeft<0?'var(--accent)':timeLeft<=5?'#f87171':'var(--accent)';
+}
+
+function workoutAction(){
+  const ex=wk.plan[wk.idx];
+  const isStretch=wk.habitId==='stretch';
+
+  if(wk.phase==='idle'||wk.phase==='prep'){
+    // Start the exercise/hold
+    clearInterval(wk.timer);
+    if(isStretch){
+      wk.phase='active'; wk.totalTime=ex.duration; wk.timeLeft=ex.duration;
+      document.getElementById('phaseLabel').textContent='HOLD';
+      document.getElementById('workoutBtn').textContent='Skip';
+      document.getElementById('workoutBtn').className='workout-btn primary';
+      startCountdown(()=>nextExercise());
+    } else {
+      // exercise — just show reps, user taps Done when finished
+      wk.phase='active';
+      document.getElementById('phaseLabel').textContent='SET '+(wk.setIdx+1)+' OF '+ex.sets;
+      setTimerDisplay(ex.reps+'', -1);
+      document.getElementById('timerSub').textContent='reps — tap Done when finished';
+      document.getElementById('workoutBtn').textContent='Done ✓';
+      document.getElementById('workoutBtn').className='workout-btn done-btn';
+    }
+  } else if(wk.phase==='active'){
+    // Done with this set/hold
+    clearInterval(wk.timer);
+    if(isStretch){
+      nextExercise();
+    } else {
+      wk.setIdx++;
+      if(wk.setIdx>=ex.sets){
+        nextExercise();
+      } else {
+        // rest between sets
+        wk.phase='rest'; wk.totalTime=ex.rest; wk.timeLeft=ex.rest;
+        document.getElementById('phaseLabel').textContent='REST';
+        document.getElementById('exerciseDetail').textContent='Next: Set '+(wk.setIdx+1)+' of '+ex.sets;
+        document.getElementById('workoutBtn').textContent='Skip Rest';
+        document.getElementById('workoutBtn').className='workout-btn rest';
+        renderSetDots(ex);
+        startCountdown(()=>{
+          wk.phase='idle';
+          document.getElementById('phaseLabel').textContent='SET '+(wk.setIdx+1)+' OF '+ex.sets;
+          document.getElementById('exerciseDetail').textContent=`${ex.sets} sets × ${ex.reps} reps`;
+          setTimerDisplay(ex.reps+'', -1);
+          document.getElementById('timerSub').textContent='reps';
+          document.getElementById('workoutBtn').textContent='Start Set '+(wk.setIdx+1);
+          document.getElementById('workoutBtn').className='workout-btn primary';
+          renderSetDots(ex);
+        });
+      }
+    }
+  } else if(wk.phase==='rest'){
+    clearInterval(wk.timer);
+    wk.phase='idle';
+    document.getElementById('phaseLabel').textContent='SET '+(wk.setIdx+1)+' OF '+ex.sets;
+    document.getElementById('exerciseDetail').textContent=`${ex.sets} sets × ${ex.reps} reps`;
+    setTimerDisplay(ex.reps+'', -1);
+    document.getElementById('timerSub').textContent='reps';
+    document.getElementById('workoutBtn').textContent='Start Set '+(wk.setIdx+1);
+    document.getElementById('workoutBtn').className='workout-btn primary';
+    renderSetDots(ex);
+  }
+}
+
+function startCountdown(onDone){
+  clearInterval(wk.timer);
+  setTimerDisplay(wk.timeLeft+'', wk.timeLeft);
+  wk.timer=setInterval(()=>{
+    wk.timeLeft--;
+    setTimerDisplay(wk.timeLeft+'', wk.timeLeft);
+    if(wk.timeLeft<=0){
+      clearInterval(wk.timer);
+      onDone();
+    }
+  },1000);
+}
+
+function nextExercise(){
+  wk.idx++;
+  wk.setIdx=0;
+  if(wk.idx>=wk.plan.length){
+    finishWorkout();
+  } else {
+    loadExercise();
+  }
+}
+
+function finishWorkout(){
+  wk.phase='done';
+  document.getElementById('phaseLabel').textContent='COMPLETE! 🎉';
+  document.getElementById('exerciseName').textContent='All done!';
+  document.getElementById('exerciseDetail').textContent='Great work today 💪';
+  document.getElementById('workoutProgressFill').style.width='100%';
+  setTimerDisplay('✓', -1);
+  document.getElementById('timerSub').textContent='';
+  document.getElementById('setDots').innerHTML='';
+  document.getElementById('workoutBtn').textContent='Mark as Done';
+  document.getElementById('workoutBtn').className='workout-btn done-btn';
+  document.getElementById('workoutBtn').onclick=()=>{
+    closeWorkout();
+    toggle(wk.habitId);
+    document.getElementById('workoutBtn').onclick=workoutAction;
+  };
+  fireConfetti();
+}
+
 
 // ── PIXEL AVATAR ──────────────────────────────────────────
 const S=10;
