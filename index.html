@@ -478,16 +478,27 @@ async function syncToWidget(){
       level: getLevel(lifetimeXP),
       updatedAt: new Date().toISOString(),
     };
-    await fetch(JSONBIN_URL, {
+    const res=await fetch(JSONBIN_URL, {
       method:'PUT',
       headers:{
         'Content-Type':'application/json',
         'X-Master-Key': JSONBIN_KEY,
+        'X-Access-Key': JSONBIN_KEY,
         'X-Bin-Versioning':'false',
       },
       body: JSON.stringify(payload),
     });
-  }catch(e){ /* silent fail — widget sync is best-effort */ }
+    if(!res.ok){
+      const txt=await res.text();
+      console.error('JSONBin sync failed:',res.status,txt);
+      showBanner('⚠ Widget sync failed: '+res.status,'#f87171');
+    } else {
+      console.log('JSONBin sync OK');
+    }
+  }catch(e){
+    console.error('JSONBin sync error:',e);
+    showBanner('⚠ Widget sync error','#f87171');
+  }
 }
 
 function save(){
