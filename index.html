@@ -475,7 +475,7 @@ async function syncToWidget(){
       level: getLevel(lifetimeXP),
       updatedAt: new Date().toISOString(),
     };
-    const res=await fetch(JSONBIN_URL, {
+    await fetch(JSONBIN_URL, {
       method:'PUT',
       headers:{
         'Content-Type':'application/json',
@@ -485,11 +485,7 @@ async function syncToWidget(){
       },
       body: JSON.stringify(payload),
     });
-    const txt=await res.text();
-    alert('Sync: '+res.status+'\n'+txt.slice(0,200));
-  }catch(e){
-    alert('Sync error: '+e.message);
-  }
+  }catch(e){ /* silent */ }
 }
 
 function save(){
@@ -1337,6 +1333,7 @@ function loop(t){drawAvatar(t);requestAnimationFrame(loop);}
 
 // ── BOOT ─────────────────────────────────────────────────
 load();loadPointsData();render();requestAnimationFrame(loop);
+setTimeout(syncToWidget, 2000); // sync real data on every app open
 </script>
 </body>
 </html>
