@@ -377,6 +377,7 @@ function loadPointsData(){
 function savePoints(){
   try{ localStorage.setItem(POINTS_KEY,String(points)); }catch(e){}
   try{ localStorage.setItem(LIFETIME_XP_KEY,String(lifetimeXP)); }catch(e){}
+  scheduleSyncWidget();
 }
 function saveRewards(){ try{ localStorage.setItem(REWARDS_KEY,JSON.stringify(rewards)); }catch(e){} }
 function saveHistory(){ try{ localStorage.setItem(HISTORY_KEY,JSON.stringify(history)); }catch(e){} }
@@ -445,12 +446,57 @@ function applyMissedDayPenalty(missedDate){
   pendingPenaltyNotice={date:missedDate,amount:PENALTY_AMOUNT};
 }
 
+// ── JSONBIN WIDGET SYNC ───────────────────────────────────
+const JSONBIN_BIN='6a3f065fda38895dfe050989';
+const JSONBIN_KEY='$2a$10$QJVQXejMMij.RzkRjQwLuu/f1irsZxZebh9FLdasVpEDOALQvX1iW';
+const JSONBIN_URL=`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}`;
+let syncTimer=null;
+
+function scheduleSyncWidget(){
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(syncToWidget, 1500);
+}
+
+async function syncToWidget(){
+  try{
+    const done=HABITS.filter(h=>state[h.id]).length;
+    const total=HABITS.length;
+    const moodNames=['Dead','Sad','Meh','OK','Strong','Legendary'];
+    const moodEmojis=['💀','😢','😐','🙂','😄','🌟'];
+    const idx=getMoodIdx();
+    const habitStatus={};
+    HABITS.forEach(h=>{ habitStatus[h.id]=!!state[h.id]; });
+    const payload={
+      points,
+      streak,
+      lifetimeXP,
+      mood: moodNames[idx],
+      moodEmoji: moodEmojis[idx],
+      done,
+      total,
+      habits: habitStatus,
+      level: getLevel(lifetimeXP),
+      updatedAt: new Date().toISOString(),
+    };
+    await fetch(JSONBIN_URL, {
+      method:'PUT',
+      headers:{
+        'Content-Type':'application/json',
+        'X-Master-Key': JSONBIN_KEY,
+        'X-Bin-Versioning':'false',
+      },
+      body: JSON.stringify(payload),
+    });
+  }catch(e){ /* silent fail — widget sync is best-effort */ }
+}
+
 function save(){
   try{
     localStorage.setItem(STORAGE_KEY,JSON.stringify({date:TODAY,state}));
     if(HABITS.every(h=>state[h.id]))
       localStorage.setItem(STREAK_KEY,JSON.stringify({streak,last:TODAY}));
   }catch(e){}
+  scheduleSyncWidget();
 }
 
 function toggle(id){
@@ -641,14 +687,37 @@ const STRETCH_PLAN=[
 // Workout state
 let wk={
   habitId:null, plan:[], idx:0, setIdx:0,
-  phase:'idle', // idle | prep | active | rest | done
-  timer:null, timeLeft:0, totalTime:0,
+  phase:'idle',
+  timer:null, gapTimer:null, timeLeft:0, totalTime:0,
+  autoRunning:false,
 };
+
+// ── AUDIO BEEP ────────────────────────────────────────────
+function playBeep(freq=880, dur=0.15, vol=0.4){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const osc=ctx.createOscillator();
+    const gain=ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value=freq;
+    gain.gain.setValueAtTime(vol,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+dur);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime+dur);
+  }catch(e){}
+}
+function playFinishBeep(){
+  // 3 ascending beeps for exercise end
+  [660,770,880].forEach((f,i)=>setTimeout(()=>playBeep(f,0.2,0.5),i*150));
+}
+function playGapBeep(){
+  playBeep(440, 0.3, 0.3);
+}
 
 function openWorkout(habitId){
   wk.habitId=habitId;
   wk.plan=habitId==='exercise'?EXERCISE_PLAN:STRETCH_PLAN;
   wk.idx=0; wk.setIdx=0; wk.phase='idle';
+  wk.autoRunning=false;
   document.getElementById('workoutTitle').textContent=habitId==='exercise'?'💪 Exercise':'🧘 Stretch';
   document.getElementById('workoutOverlay').classList.add('open');
   document.body.style.overflow='hidden';
@@ -657,6 +726,8 @@ function openWorkout(habitId){
 
 function closeWorkout(){
   clearInterval(wk.timer);
+  clearTimeout(wk.gapTimer);
+  wk.autoRunning=false;
   document.getElementById('workoutOverlay').classList.remove('open');
   document.body.style.overflow='';
   wk.phase='idle';
@@ -675,20 +746,60 @@ function loadExercise(){
   if(isStretch){
     document.getElementById('exerciseDetail').textContent=ex.detail+' · '+ex.duration+'s';
     document.getElementById('setDots').innerHTML='';
-    document.getElementById('phaseLabel').textContent='GET READY';
     document.getElementById('timerSub').textContent=ex.tip||'Hold this pose';
     setTimerDisplay(ex.duration, ex.duration);
+
+    if(wk.autoRunning){
+      // auto mode: show 5s gap countdown then start
+      startGap(()=>startStretchHold(ex));
+    } else {
+      document.getElementById('phaseLabel').textContent='GET READY';
+      const btn=document.getElementById('workoutBtn');
+      btn.textContent='Start'; btn.className='workout-btn primary';
+      btn.style.display='';
+      wk.phase='idle';
+    }
   } else {
     document.getElementById('exerciseDetail').textContent=`${ex.sets} sets × ${ex.reps} reps · ${ex.rest}s rest`;
     renderSetDots(ex);
     document.getElementById('phaseLabel').textContent='SET '+(wk.setIdx+1)+' OF '+ex.sets;
     document.getElementById('timerSub').textContent=ex.tip||'';
     setTimerDisplay(ex.reps+'', -1);
+    const btn=document.getElementById('workoutBtn');
+    btn.textContent='Start'; btn.className='workout-btn primary';
+    btn.style.display='';
+    wk.phase='idle';
   }
+}
 
+function startGap(onDone){
+  // 5 second gap between exercises
+  wk.phase='gap';
+  let t=5;
+  document.getElementById('phaseLabel').textContent='NEXT UP';
+  document.getElementById('workoutBtn').style.display='none'; // hide button during auto
+  setTimerDisplay(t+'', t);
+  playGapBeep();
+  wk.totalTime=5;
+  clearInterval(wk.timer);
+  wk.timer=setInterval(()=>{
+    t--;
+    setTimerDisplay(t+'', t);
+    if(t<=0){ clearInterval(wk.timer); onDone(); }
+  },1000);
+}
+
+function startStretchHold(ex){
+  wk.phase='active'; wk.totalTime=ex.duration; wk.timeLeft=ex.duration;
+  document.getElementById('phaseLabel').textContent='HOLD';
+  // show skip button during hold
   const btn=document.getElementById('workoutBtn');
-  btn.textContent='Start'; btn.className='workout-btn primary';
-  wk.phase='idle';
+  btn.textContent='Skip'; btn.className='workout-btn primary';
+  btn.style.display='';
+  startCountdown(()=>{
+    playFinishBeep();
+    nextExercise();
+  });
 }
 
 function renderSetDots(ex){
@@ -706,59 +817,66 @@ function setTimerDisplay(label, timeLeft){
   const arc=document.getElementById('timerArc');
   const pct=timeLeft<0?1:(wk.totalTime>0?timeLeft/wk.totalTime:1);
   arc.style.strokeDashoffset=(339.3*(1-pct))+'';
-  arc.style.stroke=timeLeft<0?'var(--accent)':timeLeft<=5?'#f87171':'var(--accent)';
+  arc.style.stroke=timeLeft<0?'var(--accent)':timeLeft<=3?'#f87171':timeLeft<=5?'#f59e0b':'var(--accent)';
+  // beep at exactly 3 seconds left
+  if(timeLeft===3 && wk.phase==='active') playBeep(660, 0.12, 0.3);
+  if(timeLeft===2 && wk.phase==='active') playBeep(660, 0.12, 0.3);
+  if(timeLeft===1 && wk.phase==='active') playBeep(880, 0.15, 0.4);
 }
 
 function workoutAction(){
   const ex=wk.plan[wk.idx];
   const isStretch=wk.habitId==='stretch';
 
-  if(wk.phase==='idle'||wk.phase==='prep'){
-    // Start the exercise/hold
-    clearInterval(wk.timer);
-    if(isStretch){
-      wk.phase='active'; wk.totalTime=ex.duration; wk.timeLeft=ex.duration;
-      document.getElementById('phaseLabel').textContent='HOLD';
-      document.getElementById('workoutBtn').textContent='Skip';
-      document.getElementById('workoutBtn').className='workout-btn primary';
-      startCountdown(()=>nextExercise());
-    } else {
-      // exercise — just show reps, user taps Done when finished
-      wk.phase='active';
-      document.getElementById('phaseLabel').textContent='SET '+(wk.setIdx+1)+' OF '+ex.sets;
-      setTimerDisplay(ex.reps+'', -1);
-      document.getElementById('timerSub').textContent='reps — tap Done when finished';
-      document.getElementById('workoutBtn').textContent='Done ✓';
-      document.getElementById('workoutBtn').className='workout-btn done-btn';
+  if(isStretch){
+    if(wk.phase==='idle'){
+      // First press — start auto flow
+      wk.autoRunning=true;
+      startStretchHold(ex);
+    } else if(wk.phase==='active'){
+      // Skip current hold
+      clearInterval(wk.timer);
+      playFinishBeep();
+      nextExercise();
+    } else if(wk.phase==='gap'){
+      // Skip gap
+      clearInterval(wk.timer);
+      startStretchHold(wk.plan[wk.idx]);
     }
-  } else if(wk.phase==='active'){
-    // Done with this set/hold
+    return;
+  }
+
+  // EXERCISE (manual sets×reps flow unchanged)
+  if(wk.phase==='idle'||wk.phase==='prep'){
     clearInterval(wk.timer);
-    if(isStretch){
+    wk.phase='active';
+    document.getElementById('phaseLabel').textContent='SET '+(wk.setIdx+1)+' OF '+ex.sets;
+    setTimerDisplay(ex.reps+'', -1);
+    document.getElementById('timerSub').textContent='reps — tap Done when finished';
+    document.getElementById('workoutBtn').textContent='Done ✓';
+    document.getElementById('workoutBtn').className='workout-btn done-btn';
+  } else if(wk.phase==='active'){
+    clearInterval(wk.timer);
+    wk.setIdx++;
+    if(wk.setIdx>=ex.sets){
       nextExercise();
     } else {
-      wk.setIdx++;
-      if(wk.setIdx>=ex.sets){
-        nextExercise();
-      } else {
-        // rest between sets
-        wk.phase='rest'; wk.totalTime=ex.rest; wk.timeLeft=ex.rest;
-        document.getElementById('phaseLabel').textContent='REST';
-        document.getElementById('exerciseDetail').textContent='Next: Set '+(wk.setIdx+1)+' of '+ex.sets;
-        document.getElementById('workoutBtn').textContent='Skip Rest';
-        document.getElementById('workoutBtn').className='workout-btn rest';
+      wk.phase='rest'; wk.totalTime=ex.rest; wk.timeLeft=ex.rest;
+      document.getElementById('phaseLabel').textContent='REST';
+      document.getElementById('exerciseDetail').textContent='Next: Set '+(wk.setIdx+1)+' of '+ex.sets;
+      document.getElementById('workoutBtn').textContent='Skip Rest';
+      document.getElementById('workoutBtn').className='workout-btn rest';
+      renderSetDots(ex);
+      startCountdown(()=>{
+        wk.phase='idle';
+        document.getElementById('phaseLabel').textContent='SET '+(wk.setIdx+1)+' OF '+ex.sets;
+        document.getElementById('exerciseDetail').textContent=`${ex.sets} sets × ${ex.reps} reps`;
+        setTimerDisplay(ex.reps+'', -1);
+        document.getElementById('timerSub').textContent='reps';
+        document.getElementById('workoutBtn').textContent='Start Set '+(wk.setIdx+1);
+        document.getElementById('workoutBtn').className='workout-btn primary';
         renderSetDots(ex);
-        startCountdown(()=>{
-          wk.phase='idle';
-          document.getElementById('phaseLabel').textContent='SET '+(wk.setIdx+1)+' OF '+ex.sets;
-          document.getElementById('exerciseDetail').textContent=`${ex.sets} sets × ${ex.reps} reps`;
-          setTimerDisplay(ex.reps+'', -1);
-          document.getElementById('timerSub').textContent='reps';
-          document.getElementById('workoutBtn').textContent='Start Set '+(wk.setIdx+1);
-          document.getElementById('workoutBtn').className='workout-btn primary';
-          renderSetDots(ex);
-        });
-      }
+      });
     }
   } else if(wk.phase==='rest'){
     clearInterval(wk.timer);
