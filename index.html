@@ -467,13 +467,10 @@ async function syncToWidget(){
     const habitStatus={};
     HABITS.forEach(h=>{ habitStatus[h.id]=!!state[h.id]; });
     const payload={
-      points,
-      streak,
-      lifetimeXP,
+      points, streak, lifetimeXP,
       mood: moodNames[idx],
       moodEmoji: moodEmojis[idx],
-      done,
-      total,
+      done, total,
       habits: habitStatus,
       level: getLevel(lifetimeXP),
       updatedAt: new Date().toISOString(),
@@ -488,16 +485,10 @@ async function syncToWidget(){
       },
       body: JSON.stringify(payload),
     });
-    if(!res.ok){
-      const txt=await res.text();
-      console.error('JSONBin sync failed:',res.status,txt);
-      showBanner('⚠ Widget sync failed: '+res.status,'#f87171');
-    } else {
-      console.log('JSONBin sync OK');
-    }
+    const txt=await res.text();
+    alert('Sync: '+res.status+'\n'+txt.slice(0,200));
   }catch(e){
-    console.error('JSONBin sync error:',e);
-    showBanner('⚠ Widget sync error','#f87171');
+    alert('Sync error: '+e.message);
   }
 }
 
