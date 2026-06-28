@@ -167,6 +167,12 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
 .emoji-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
 .emoji-pick{font-size:20px;padding:7px 10px;border-radius:10px;background:var(--bg);border:1px solid var(--border);cursor:pointer;}
 .emoji-pick.sel{border-color:var(--accent);background:rgba(124,111,255,0.15);}
+.habit-streak{font-size:13px;flex-shrink:0;line-height:1;}
+.habit-streak.hot{animation:flicker 1.2s ease-in-out infinite alternate;}
+@keyframes flicker{
+  0%{filter:brightness(1) drop-shadow(0 0 2px #f97316);}
+  100%{filter:brightness(1.3) drop-shadow(0 0 7px #f97316);}
+}
 </style>
 </head>
 <body>
@@ -304,8 +310,11 @@ const HISTORY_KEY='adayHistory_v1';
 const POINTS_AWARDED_KEY='adayPointsAwarded_v1';
 const PENALIZED_KEY='adayPenalized_v1';
 const LIFETIME_XP_KEY='adayLifetimeXP_v1';
+const HABIT_STREAKS_KEY='adayHabitStreaks_v1';
 const PENALTY_AMOUNT=50;
 const TODAY=new Date().toDateString();
+
+let habitStreaks={}; // {habitId: {streak, last}}
 
 const DEFAULT_REWARDS=[
   {id:'r1',icon:'📺',name:'YouTube 1 hour',cost:100},
@@ -372,6 +381,33 @@ function loadPointsData(){
     const raw=localStorage.getItem(HISTORY_KEY);
     history=raw?JSON.parse(raw):[];
   }catch(e){ history=[]; }
+  try{
+    const raw=localStorage.getItem(HABIT_STREAKS_KEY);
+    habitStreaks=raw?JSON.parse(raw):{};
+  }catch(e){ habitStreaks={}; }
+}
+
+function saveHabitStreaks(){
+  try{ localStorage.setItem(HABIT_STREAKS_KEY,JSON.stringify(habitStreaks)); }catch(e){}
+}
+
+function updateHabitStreaks(prevState, prevDate){
+  // Called on day rollover — update each habit's individual streak
+  const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
+  const wasYesterday=prevDate===yesterday.toDateString();
+  HABITS.forEach(h=>{
+    const done=!!prevState[h.id];
+    const cur=habitStreaks[h.id]||{streak:0,last:''};
+    if(done){
+      habitStreaks[h.id]={
+        streak: wasYesterday&&cur.last===yesterday.toDateString() ? cur.streak+1 : 1,
+        last: prevDate
+      };
+    } else {
+      habitStreaks[h.id]={streak:0, last:cur.last};
+    }
+  });
+  saveHabitStreaks();
 }
 
 function savePoints(){
@@ -427,6 +463,7 @@ function load(){
         } else {
           streak=0;
         }
+        updateHabitStreaks(d.state, d.date);
         state={};save();
       }
     }
@@ -561,17 +598,28 @@ function render(){
 
   document.getElementById('avatarCard').classList.toggle('glowing',!!state['glow']);
 
+function getHabitStreakBadge(id){
+  const s=(habitStreaks[id]||{}).streak||0;
+  if(s===0) return {badge:'',hot:false};
+  if(s>=30) return {badge:'💎'+s,hot:true};
+  if(s>=7)  return {badge:'🔥🔥'+s,hot:true};
+  if(s>=2)  return {badge:'🔥'+s,hot:true};
+  return {badge:'🔥1',hot:false};
+}
+
   const list=document.getElementById('habitList');
   list.innerHTML='';
   HABITS.forEach(h=>{
+    const {badge,hot}=getHabitStreakBadge(h.id);
     const el=document.createElement('div');
     el.className=`habit-item ${h.type}${state[h.id]?' done':''}`;
+    const streakEl=badge?`<div class="habit-streak${hot?' hot':''}">${badge}</div>`:'';
     if(h.workout && !state[h.id]){
       el.onclick=()=>openWorkout(h.id);
-      el.innerHTML=`<div class="habit-icon">${h.icon}</div><div class="habit-text"><div class="habit-name">${h.name}</div><div class="habit-desc">${h.desc}</div></div><div style="font-size:11px;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:4px 8px;flex-shrink:0;">START</div>`;
+      el.innerHTML=`<div class="habit-icon">${h.icon}</div><div class="habit-text"><div class="habit-name">${h.name}</div><div class="habit-desc">${h.desc}</div></div>${streakEl}<div style="font-size:11px;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:4px 8px;flex-shrink:0;">START</div>`;
     } else {
       el.onclick=()=>toggle(h.id);
-      el.innerHTML=`<div class="habit-icon">${h.icon}</div><div class="habit-text"><div class="habit-name">${h.name}</div><div class="habit-desc">${h.desc}</div></div><div class="checkmark"></div>`;
+      el.innerHTML=`<div class="habit-icon">${h.icon}</div><div class="habit-text"><div class="habit-name">${h.name}</div><div class="habit-desc">${h.desc}</div></div>${streakEl}<div class="checkmark"></div>`;
     }
     list.appendChild(el);
   });
