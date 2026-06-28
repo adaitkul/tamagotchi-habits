@@ -216,6 +216,7 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
     <div>
       <div class="section-header">
         <span class="section-title">Today's Quests</span>
+        <button onclick="openStreakEditor()" style="font-size:11px;padding:4px 10px;border-radius:8px;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;">✏️ Streaks</button>
       </div>
       <div class="habits-list" id="habitList"></div>
     </div>
@@ -250,6 +251,19 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
   </div>
 
 </div>
+<!-- Streak Editor Modal -->
+<div class="modal-overlay" id="streakEditorOverlay" onclick="if(event.target===this)closeStreakEditor()">
+  <div class="modal">
+    <h2>✏️ Edit Habit Streaks</h2>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">Set your current consecutive day streak for each habit.</p>
+    <div id="streakEditorList" style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeStreakEditor()">Cancel</button>
+      <button class="btn-confirm" onclick="saveStreakEdits()">Save</button>
+    </div>
+  </div>
+</div>
+
 <canvas class="confetti-overlay" id="confettiCanvas"></canvas>
 
 <!-- WORKOUT PLAYER -->
@@ -979,6 +993,47 @@ function finishWorkout(){
   fireConfetti();
 }
 
+
+// ── STREAK EDITOR ─────────────────────────────────────────
+function openStreakEditor(){
+  const list=document.getElementById('streakEditorList');
+  list.innerHTML='';
+  HABITS.forEach(h=>{
+    const cur=(habitStreaks[h.id]||{}).streak||0;
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px;';
+    row.innerHTML=`
+      <div style="display:flex;align-items:center;gap:8px;flex:1;">
+        <span style="font-size:18px;">${h.icon}</span>
+        <span style="font-size:14px;color:var(--text);">${h.name}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button onclick="adjustStreak('${h.id}',-1)" style="width:28px;height:28px;border-radius:50%;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">−</button>
+        <span id="streak-val-${h.id}" style="font-size:15px;font-weight:700;color:var(--gold);min-width:28px;text-align:center;">${cur}</span>
+        <button onclick="adjustStreak('${h.id}',1)" style="width:28px;height:28px;border-radius:50%;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
+      </div>
+    `;
+    list.appendChild(row);
+  });
+  document.getElementById('streakEditorOverlay').classList.add('open');
+}
+
+function adjustStreak(id, delta){
+  const cur=(habitStreaks[id]||{}).streak||0;
+  const newVal=Math.max(0, cur+delta);
+  habitStreaks[id]={streak:newVal, last:newVal>0?new Date(Date.now()-86400000).toDateString():''};
+  document.getElementById('streak-val-'+id).textContent=newVal;
+}
+
+function saveStreakEdits(){
+  saveHabitStreaks();
+  closeStreakEditor();
+  render();
+}
+
+function closeStreakEditor(){
+  document.getElementById('streakEditorOverlay').classList.remove('open');
+}
 
 // ── PIXEL AVATAR ──────────────────────────────────────────
 const S=10;
