@@ -449,13 +449,13 @@ function maybeAwardDailyPoints(){
 }
 
 const HABITS=[
-  {id:'morning', icon:'☀️',name:'Morning routine',  desc:'Wake up fresh, start strong', type:'morning'},
-  {id:'money',   icon:'💸',name:'Earn 1500 CZK',     desc:'Delivery shift done',          type:'money'},
-  {id:'exercise',icon:'💪',name:'Exercise',           desc:'Chest, shoulders & arms',      type:'exercise', workout:true},
-  {id:'stretch', icon:'🧘',name:'Stretch / bend',     desc:'Body stays loose',             type:'stretch',  workout:true},
-  {id:'study',   icon:'📖',name:'2 study sessions',   desc:'Knowledge compounds',          type:'study'},
-  {id:'clean',   icon:'🚭',name:'No nicotine',        desc:'Stay clean today',             type:'clean'},
-  {id:'glow',    icon:'✨',name:'Private habit',       desc:'···',                          type:'glow'},
+  {id:'morning', icon:'☀️',name:'Morning routine',  desc:'Wake up fresh, start strong', type:'morning', pts:10},
+  {id:'money',   icon:'💸',name:'Earn 1500 CZK',     desc:'Delivery shift done',          type:'money',   pts:0},
+  {id:'exercise',icon:'💪',name:'Exercise',           desc:'Chest, shoulders & arms',      type:'exercise', workout:true, pts:20},
+  {id:'stretch', icon:'🧘',name:'Stretch / bend',     desc:'Body stays loose',             type:'stretch',  workout:true, pts:10},
+  {id:'study',   icon:'📖',name:'2 study sessions',   desc:'Knowledge compounds',          type:'study',   pts:20},
+  {id:'clean',   icon:'🚭',name:'No nicotine',        desc:'Stay clean today',             type:'clean',   pts:10},
+  {id:'glow',    icon:'✨',name:'Private habit',       desc:'···',                          type:'glow',    pts:10},
 ];
 
 function load(){
@@ -549,7 +549,18 @@ function save(){
 }
 
 function toggle(id){
+  const wasOn=!!state[id];
   state[id]=!state[id];
+  const h=HABITS.find(h=>h.id===id);
+
+  if(!wasOn && state[id]){
+    // checking it on — award points once per day per habit
+    awardHabitPoints(id, h.pts||0);
+  } else if(wasOn && !state[id]){
+    // unchecking — revoke today's award for this habit if it was given today
+    revokeHabitPoints(id, h.pts||0);
+  }
+
   const allDone=HABITS.every(h=>state[h.id]);
   if(allDone){
     const sk=JSON.parse(localStorage.getItem(STREAK_KEY)||'{"streak":0,"last":""}');
@@ -561,6 +572,34 @@ function toggle(id){
     fireConfetti();
   }
   save();render();
+}
+
+const HABIT_PTS_AWARDED_KEY='adayHabitPtsAwarded_v1';
+
+function awardHabitPoints(habitId, pts){
+  if(pts<=0)return;
+  let awarded={};
+  try{ awarded=JSON.parse(localStorage.getItem(HABIT_PTS_AWARDED_KEY)||'{}'); }catch(e){}
+  const key=TODAY+'_'+habitId;
+  if(awarded[key])return; // already awarded today for this habit
+  points+=pts;
+  lifetimeXP+=pts;
+  awarded[key]=true;
+  localStorage.setItem(HABIT_PTS_AWARDED_KEY,JSON.stringify(awarded));
+  savePoints();
+}
+
+function revokeHabitPoints(habitId, pts){
+  if(pts<=0)return;
+  let awarded={};
+  try{ awarded=JSON.parse(localStorage.getItem(HABIT_PTS_AWARDED_KEY)||'{}'); }catch(e){}
+  const key=TODAY+'_'+habitId;
+  if(!awarded[key])return; // wasn't awarded today, nothing to revoke
+  points=Math.max(0,points-pts);
+  lifetimeXP=Math.max(0,lifetimeXP-pts);
+  delete awarded[key];
+  localStorage.setItem(HABIT_PTS_AWARDED_KEY,JSON.stringify(awarded));
+  savePoints();
 }
 
 function getMoodIdx(){
@@ -628,12 +667,13 @@ function getHabitStreakBadge(id){
     const el=document.createElement('div');
     el.className=`habit-item ${h.type}${state[h.id]?' done':''}`;
     const streakEl=badge?`<div class="habit-streak${hot?' hot':''}">${badge}</div>`:'';
+    const ptsLabel=h.pts>0?` · +${h.pts}pts`:'';
     if(h.workout && !state[h.id]){
       el.onclick=()=>openWorkout(h.id);
-      el.innerHTML=`<div class="habit-icon">${h.icon}</div><div class="habit-text"><div class="habit-name">${h.name}</div><div class="habit-desc">${h.desc}</div></div>${streakEl}<div style="font-size:11px;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:4px 8px;flex-shrink:0;">START</div>`;
+      el.innerHTML=`<div class="habit-icon">${h.icon}</div><div class="habit-text"><div class="habit-name">${h.name}</div><div class="habit-desc">${h.desc}${ptsLabel}</div></div>${streakEl}<div style="font-size:11px;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:4px 8px;flex-shrink:0;">START</div>`;
     } else {
       el.onclick=()=>toggle(h.id);
-      el.innerHTML=`<div class="habit-icon">${h.icon}</div><div class="habit-text"><div class="habit-name">${h.name}</div><div class="habit-desc">${h.desc}</div></div>${streakEl}<div class="checkmark"></div>`;
+      el.innerHTML=`<div class="habit-icon">${h.icon}</div><div class="habit-text"><div class="habit-name">${h.name}</div><div class="habit-desc">${h.desc}${ptsLabel}</div></div>${streakEl}<div class="checkmark"></div>`;
     }
     list.appendChild(el);
   });
