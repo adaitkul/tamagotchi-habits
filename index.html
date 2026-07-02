@@ -296,6 +296,11 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
         <div class="casino-label">You <span id="playerScore" style="color:var(--muted);font-size:12px;"></span></div>
         <div class="card-row" id="playerCards"></div>
       </div>
+      <!-- split hand -->
+      <div id="splitSection" style="display:none;margin-top:10px;">
+        <div class="casino-label" style="color:#f5c842;">Split Hand <span id="splitScore" style="color:var(--muted);font-size:12px;"></span></div>
+        <div class="card-row" id="splitCards"></div>
+      </div>
     </div>
 
     <div id="casinoMessage" class="casino-message"></div>
@@ -318,10 +323,11 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
 
     <!-- Game actions -->
     <div id="gameSection" style="display:none;">
-      <div style="display:flex;gap:10px;justify-content:center;">
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
         <button class="casino-action-btn" onclick="playerHit()">Hit</button>
         <button class="casino-action-btn secondary" onclick="playerStand()">Stand</button>
         <button class="casino-action-btn secondary" id="doubleBtn" onclick="playerDouble()">Double</button>
+        <button class="casino-action-btn secondary" id="splitBtn" onclick="playerSplit()">Split</button>
       </div>
     </div>
 
@@ -1644,7 +1650,8 @@ function loop(t){drawAvatar(t);requestAnimationFrame(loop);}
 const CASINO_STATS_KEY='adayCasinoStats_v1';
 let bj={
   deck:[], playerHand:[], dealerHand:[],
-  bet:50, phase:'bet', // bet | playing | done
+  splitHand:[], splitBet:0, playingSplit:false, splitDone:false,
+  bet:50, phase:'bet',
   stats:{wins:0,losses:0,pushes:0,net:0},
 };
 
@@ -1699,13 +1706,27 @@ function cardHTML(card, hidden=false){
 }
 
 function renderCards(){
-  const ph=bj.playerHand, dh=bj.dealerHand;
+  const ph=bj.playerHand, dh=bj.dealerHand, sh=bj.splitHand;
   const dealerHidden=bj.phase==='playing';
-  document.getElementById('playerCards').innerHTML=ph.map(c=>cardHTML(c)).join('');
+
+  // highlight active hand
+  const playerRow=document.getElementById('playerCards');
+  const splitRow=document.getElementById('splitCards');
+  playerRow.style.opacity=bj.playingSplit?'0.5':'1';
+  if(splitRow) splitRow.style.opacity=bj.playingSplit?'1':'0.5';
+
+  playerRow.innerHTML=ph.map(c=>cardHTML(c)).join('');
   document.getElementById('dealerCards').innerHTML=dh.map((c,i)=>cardHTML(c,dealerHidden&&i===1)).join('');
-  document.getElementById('playerScore').textContent=ph.length?`(${handValue(ph)})`:'' ;
+  document.getElementById('playerScore').textContent=ph.length?`(${handValue(ph)})`:'';
+
   const dealerShown=dealerHidden?handValue([dh[0]]):handValue(dh);
   document.getElementById('dealerScore').textContent=dh.length?`(${dealerShown})`:'';
+
+  if(sh.length>0){
+    document.getElementById('splitSection').style.display='';
+    splitRow.innerHTML=sh.map(c=>cardHTML(c)).join('');
+    document.getElementById('splitScore').textContent=`(${handValue(sh)})`;
+  }
 }
 
 function renderCasino(){
@@ -1740,87 +1761,155 @@ function startBlackjack(){
   if(!bj.deck||bj.deck.length<30) bj.deck=makeDeck();
   bj.playerHand=[bj.deck.pop(),bj.deck.pop()];
   bj.dealerHand=[bj.deck.pop(),bj.deck.pop()];
+  bj.splitHand=[]; bj.splitBet=0; bj.playingSplit=false; bj.splitDone=false;
   bj.phase='playing';
 
   document.getElementById('betSection').style.display='none';
   document.getElementById('gameSection').style.display='';
   document.getElementById('resultSection').style.display='none';
+  document.getElementById('splitSection').style.display='none';
   document.getElementById('doubleBtn').disabled=false;
+
+  // show split button only if first 2 cards match value and can afford
+  const canSplit=cardVal(bj.playerHand[0])===cardVal(bj.playerHand[1])&&points>=bj.bet*2;
+  document.getElementById('splitBtn').disabled=!canSplit;
+
   showMessage('');
 
-  // check natural blackjack
-  if(handValue(bj.playerHand)===21){
-    endGame();
-    return;
-  }
+  if(handValue(bj.playerHand)===21){ endGame(); return; }
   renderCasino();
 }
 
 function playerHit(){
-  bj.playerHand.push(bj.deck.pop());
+  if(bj.playingSplit){
+    bj.splitHand.push(bj.deck.pop());
+  } else {
+    bj.playerHand.push(bj.deck.pop());
+  }
   document.getElementById('doubleBtn').disabled=true;
+  document.getElementById('splitBtn').disabled=true;
   renderCasino();
-  if(handValue(bj.playerHand)>21) endGame();
+
+  const activeHand=bj.playingSplit?bj.splitHand:bj.playerHand;
+  if(handValue(activeHand)>21){
+    if(!bj.playingSplit&&bj.splitHand.length>0){
+      // first hand busted — move to split hand
+      switchToSplitHand();
+    } else {
+      endGame();
+    }
+  }
 }
 
 function playerStand(){
-  // dealer plays
-  while(handValue(bj.dealerHand)<17) bj.dealerHand.push(bj.deck.pop());
-  endGame();
+  if(!bj.playingSplit&&bj.splitHand.length>0&&!bj.splitDone){
+    // finished first hand, move to split
+    switchToSplitHand();
+  } else {
+    // dealer plays
+    while(handValue(bj.dealerHand)<17) bj.dealerHand.push(bj.deck.pop());
+    endGame();
+  }
+}
+
+function switchToSplitHand(){
+  bj.playingSplit=true;
+  showMessage('Now playing Split Hand','push');
+  document.getElementById('doubleBtn').disabled=false;
+  document.getElementById('splitBtn').disabled=true;
+  // if split aces, auto-stand (one card each)
+  if(bj.playerHand[0].value==='A'&&bj.splitHand.length===1){
+    playerStand();
+  } else {
+    renderCasino();
+  }
 }
 
 function playerDouble(){
-  if(points<bj.bet*2){ showMessage("Not enough pts to double",'lose'); return; }
-  bj.bet*=2;
+  if(bj.playingSplit){
+    if(points<bj.splitBet*2){ showMessage("Not enough pts",'lose'); return; }
+    bj.splitBet*=2;
+    bj.splitHand.push(bj.deck.pop());
+    playerStand();
+  } else {
+    if(points<bj.bet*2){ showMessage("Not enough pts to double",'lose'); return; }
+    bj.bet*=2;
+    bj.playerHand.push(bj.deck.pop());
+    playerStand();
+  }
+}
+
+function playerSplit(){
+  if(points<bj.bet*2){ showMessage("Not enough pts to split",'lose'); return; }
+  // move second card to split hand, give each a new card
+  bj.splitHand=[bj.playerHand.pop()];
+  bj.splitBet=bj.bet;
   bj.playerHand.push(bj.deck.pop());
-  playerStand();
+  bj.splitHand.push(bj.deck.pop());
+  document.getElementById('splitSection').style.display='';
+  document.getElementById('splitBtn').disabled=true;
+  document.getElementById('doubleBtn').disabled=false;
+  showMessage('Split! Play first hand','push');
+  // if aces — one card each, auto-stand both
+  if(bj.playerHand[0].value==='A'){
+    renderCasino();
+    setTimeout(()=>playerStand(),500);
+  } else {
+    renderCasino();
+  }
 }
 
 function endGame(){
   bj.phase='done';
-  const pv=handValue(bj.playerHand);
   const dv=handValue(bj.dealerHand);
-  const playerBJ=pv===21&&bj.playerHand.length===2;
-  const dealerBJ=dv===21&&bj.dealerHand.length===2;
+  let totalDelta=0;
+  let messages=[];
 
-  let result='';
-  let ptsDelta=0;
-
-  if(pv>21){
-    result='lose'; ptsDelta=-bj.bet;
-    showMessage('Bust! −'+bj.bet+' pts','lose');
-  } else if(playerBJ&&!dealerBJ){
-    // blackjack pays 3:2
-    ptsDelta=Math.round(bj.bet*1.5);
-    result='win';
-    showMessage('🃏 Blackjack! +'+ptsDelta+' pts','bj');
-  } else if(dealerBJ&&!playerBJ){
-    result='lose'; ptsDelta=-bj.bet;
-    showMessage('Dealer Blackjack! −'+bj.bet+' pts','lose');
-  } else if(dv>21){
-    result='win'; ptsDelta=bj.bet;
-    showMessage('Dealer busts! +'+bj.bet+' pts','win');
-  } else if(pv>dv){
-    result='win'; ptsDelta=bj.bet;
-    showMessage('You win! +'+bj.bet+' pts','win');
-  } else if(dv>pv){
-    result='lose'; ptsDelta=-bj.bet;
-    showMessage('Dealer wins. −'+bj.bet+' pts','lose');
-  } else {
-    result='push'; ptsDelta=0;
-    showMessage('Push — bet returned','push');
+  function resolveHand(hand, bet, label){
+    const pv=handValue(hand);
+    const playerBJ=pv===21&&hand.length===2&&!bj.splitHand.length; // BJ only on non-split
+    const dealerBJ=dv===21&&bj.dealerHand.length===2;
+    let delta=0, msg='';
+    if(pv>21){
+      delta=-bet; msg=(label?label+' ':'')+'Bust −'+bet;
+    } else if(playerBJ&&!dealerBJ){
+      delta=Math.round(bet*1.5); msg='🃏 Blackjack! +'+delta;
+    } else if(dealerBJ&&!playerBJ){
+      delta=-bet; msg=(label?label+' ':'')+'Dealer BJ −'+bet;
+    } else if(dv>21){
+      delta=bet; msg=(label?label+' ':'')+'Dealer busts +'+bet;
+    } else if(pv>dv){
+      delta=bet; msg=(label?label+' ':'')+'Win +'+bet;
+    } else if(dv>pv){
+      delta=-bet; msg=(label?label+' ':'')+'Lose −'+bet;
+    } else {
+      delta=0; msg=(label?label+' ':'')+'Push';
+    }
+    return {delta,msg};
   }
 
-  points=Math.max(0,points+ptsDelta);
-  lifetimeXP+=Math.max(0,ptsDelta); // only gains count toward XP
+  const main=resolveHand(bj.playerHand, bj.bet, bj.splitHand.length?'Hand 1:':'');
+  totalDelta+=main.delta;
+  messages.push(main.msg);
+
+  if(bj.splitHand.length>0){
+    const split=resolveHand(bj.splitHand, bj.splitBet, 'Hand 2:');
+    totalDelta+=split.delta;
+    messages.push(split.msg);
+  }
+
+  points=Math.max(0,points+totalDelta);
+  lifetimeXP+=Math.max(0,totalDelta);
   savePoints();
 
-  if(result==='win') bj.stats.wins++;
-  else if(result==='lose') bj.stats.losses++;
-  else bj.stats.pushes++;
-  bj.stats.net+=ptsDelta;
+  if(totalDelta>0){ bj.stats.wins++; }
+  else if(totalDelta<0){ bj.stats.losses++; }
+  else { bj.stats.pushes++; }
+  bj.stats.net+=totalDelta;
   saveCasinoStats();
 
+  const msgType=totalDelta>0?'win':totalDelta<0?'lose':'push';
+  showMessage(messages.join(' · '), msgType);
   document.getElementById('gameSection').style.display='none';
   document.getElementById('resultSection').style.display='';
   renderCasino();
@@ -1828,12 +1917,13 @@ function endGame(){
 
 function resetBlackjack(){
   bj.phase='bet';
-  bj.playerHand=[];
-  bj.dealerHand=[];
-  bj.bet=Math.min(bj.bet,points)||10;
+  bj.playerHand=[]; bj.dealerHand=[];
+  bj.splitHand=[]; bj.splitBet=0; bj.playingSplit=false; bj.splitDone=false;
+  bj.bet=Math.min(bj.bet,Math.max(10,points))||10;
   document.getElementById('betSection').style.display='';
   document.getElementById('gameSection').style.display='none';
   document.getElementById('resultSection').style.display='none';
+  document.getElementById('splitSection').style.display='none';
   showMessage('');
   renderCasino();
 }
