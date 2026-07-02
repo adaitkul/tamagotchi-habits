@@ -331,10 +331,10 @@ const TODAY=new Date().toDateString();
 let habitStreaks={}; // {habitId: {streak, last}}
 
 const DEFAULT_REWARDS=[
-  {id:'r1',icon:'📺',name:'YouTube 1 hour',cost:100},
-  {id:'r2',icon:'🎮',name:'Gaming 1 hour',cost:100},
-  {id:'r3',icon:'🍕',name:'Treat meal',cost:150},
-  {id:'r4',icon:'😴',name:'Sleep in / lazy morning',cost:200},
+  {id:'r1',icon:'📺',name:'YouTube 1 hour',   cost:100, basePrice:100, lastBought:'', lastUpdated:''},
+  {id:'r2',icon:'🎮',name:'Gaming 1 hour',    cost:100, basePrice:100, lastBought:'', lastUpdated:''},
+  {id:'r3',icon:'🍕',name:'Treat meal',        cost:150, basePrice:150, lastBought:'', lastUpdated:''},
+  {id:'r4',icon:'😴',name:'Sleep in / lazy morning', cost:200, basePrice:200, lastBought:'', lastUpdated:''},
 ];
 
 const EMOJI_CHOICES=['🎁','📺','🎮','🍕','🍔','☕','🛍️','😴','🎬','🎵','🍫','🛌','🚗','✈️','📱','💆'];
@@ -1303,7 +1303,59 @@ function drawAvatar(t){
   }
 }
 
-// ── REWARDS ──────────────────────────────────────────────
+// ── MARKET PRICE ENGINE ───────────────────────────────────
+const MARKET_KEY='adayMarketUpdated_v1';
+const PRICE_RISE  = 0.15; // +15% per purchase
+const PRICE_DECAY = 0.05; // -5% per idle day
+const PRICE_FLOOR = 0.50; // min 50% of base
+const PRICE_CEIL  = 2.00; // max 200% of base
+
+function updateMarketPrices(){
+  // Run once per day — decay idle rewards
+  let lastMarket='';
+  try{ lastMarket=localStorage.getItem(MARKET_KEY)||''; }catch(e){}
+  if(lastMarket===TODAY)return; // already updated today
+
+  rewards=rewards.map(r=>{
+    if(!r.basePrice) r.basePrice=r.cost; // migrate old rewards
+    if(!r.lastUpdated) r.lastUpdated=TODAY;
+
+    // count idle days since last bought or last updated
+    const refDate=r.lastBought||r.lastUpdated;
+    const daysSince=refDate?Math.floor((Date.now()-new Date(refDate).getTime())/86400000):0;
+    if(daysSince>0){
+      const decayFactor=Math.pow(1-PRICE_DECAY, daysSince);
+      const floor=Math.round(r.basePrice*PRICE_FLOOR);
+      const newCost=Math.max(floor, Math.round(r.cost*decayFactor));
+      r.cost=newCost;
+    }
+    r.lastUpdated=TODAY;
+    return r;
+  });
+
+  try{ localStorage.setItem(MARKET_KEY,TODAY); }catch(e){}
+  saveRewards();
+}
+
+function applyPurchaseSpike(r){
+  // +15% on purchase, capped at 200% of base
+  const ceil=Math.round(r.basePrice*PRICE_CEIL);
+  r.cost=Math.min(ceil, Math.round(r.cost*(1+PRICE_RISE)));
+  r.lastBought=TODAY;
+  r.lastUpdated=TODAY;
+  return r;
+}
+
+function priceTrend(r){
+  if(!r.basePrice)return {arrow:'→',color:'var(--muted)',diff:0};
+  const diff=r.cost-r.basePrice;
+  const pct=Math.round((diff/r.basePrice)*100);
+  if(pct>15)  return {arrow:'↑',color:'#f87171',diff:pct};
+  if(pct>0)   return {arrow:'↗',color:'#fb923c',diff:pct};
+  if(pct===0) return {arrow:'→',color:'var(--muted)',diff:0};
+  if(pct>-15) return {arrow:'↘',color:'#4ade80',diff:pct};
+  return {arrow:'↓',color:'#34d399',diff:pct};
+}
 function renderRewards(){
   document.getElementById('pointsVal').textContent=points;
   const {lvl,pct,needed}=getLevelProgress(lifetimeXP);
@@ -1317,6 +1369,7 @@ function renderRewards(){
   info.style.cssText=`margin-top:10px;font-size:13px;font-weight:700;color:${lvlColor};`;
   info.textContent=`Lv.${lvl} ${lvlName} · ${lifetimeXP} total XP`;
   card.appendChild(info);
+
   const list=document.getElementById('rewardsList');
   list.innerHTML='';
   if(!rewards.length){
@@ -1324,14 +1377,21 @@ function renderRewards(){
     return;
   }
   rewards.forEach(r=>{
-    const canAfford = points>=r.cost;
+    const canAfford=points>=r.cost;
+    const {arrow,color,diff}=priceTrend(r);
+    const diffStr=diff>0?`+${diff}%`:diff<0?`${diff}%`:'';
     const el=document.createElement('div');
     el.className='reward-item';
     el.innerHTML=`
       <div class="reward-icon">${r.icon}</div>
       <div class="reward-text">
         <div class="reward-name">${r.name}</div>
-        <div class="reward-cost">${r.cost} pts</div>
+        <div class="reward-cost">
+          <span style="font-size:14px;font-weight:800;color:var(--gold);">${r.cost}</span>
+          <span style="font-size:11px;color:var(--muted);"> pts</span>
+          <span style="font-size:12px;font-weight:700;color:${color};margin-left:6px;">${arrow} ${diffStr}</span>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:1px;">base ${r.basePrice||r.cost} pts</div>
       </div>
       <div class="reward-actions">
         <button class="btn-redeem" ${canAfford?'':'disabled'} onclick="redeemReward('${r.id}')">Redeem</button>
@@ -1346,9 +1406,13 @@ function renderRewards(){
 function redeemReward(id){
   const r=rewards.find(r=>r.id===id);
   if(!r||points<r.cost)return;
-  points-=r.cost;
+  const costPaid=r.cost;
+  points-=costPaid;
   savePoints();
-  history.unshift({id:'h'+Date.now(),name:r.name,icon:r.icon,cost:r.cost,date:new Date().toISOString()});
+  // apply market spike
+  applyPurchaseSpike(r);
+  saveRewards();
+  history.unshift({id:'h'+Date.now(),name:r.name,icon:r.icon,cost:costPaid,date:new Date().toISOString()});
   saveHistory();
   renderRewards();
   fireConfetti();
@@ -1410,9 +1474,20 @@ function confirmRewardSave(){
 
   if(editingRewardId){
     const r=rewards.find(r=>r.id===editingRewardId);
-    if(r){ r.name=name; r.cost=cost; r.icon=selectedEmoji; }
+    if(r){
+      r.name=name; r.icon=selectedEmoji;
+      // only update basePrice if cost changed significantly (user intentionally repricing)
+      if(Math.abs(cost-r.cost)>1){
+        r.basePrice=cost;
+        r.cost=cost;
+      }
+    }
   } else {
-    rewards.push({id:'r'+Date.now(),icon:selectedEmoji,name,cost});
+    rewards.push({
+      id:'r'+Date.now(), icon:selectedEmoji, name,
+      cost, basePrice:cost,
+      lastBought:'', lastUpdated:TODAY,
+    });
   }
   saveRewards();
   closeRewardModal();
@@ -1475,7 +1550,7 @@ function fireConfetti(){
 function loop(t){drawAvatar(t);requestAnimationFrame(loop);}
 
 // ── BOOT ─────────────────────────────────────────────────
-load();loadPointsData();render();requestAnimationFrame(loop);
+load();loadPointsData();updateMarketPrices();render();requestAnimationFrame(loop);
 setTimeout(syncToWidget, 2000); // sync real data on every app open
 </script>
 </body>
