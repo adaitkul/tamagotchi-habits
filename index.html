@@ -86,7 +86,33 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
 .habit-item.done.exercise .checkmark{background:#fb923c;}
 .chip.exercise.on{background:#fb923c;}
 
-/* Workout player */
+/* Casino */
+.casino-balance-card{background:linear-gradient(135deg,#1a1a2e,#0f3460);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center;}
+.casino-table{background:#0a2a1a;border:2px solid #1a5a2a;border-radius:var(--radius);padding:16px;min-height:180px;display:flex;flex-direction:column;justify-content:space-between;}
+.casino-label{font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;}
+.card-row{display:flex;gap:6px;flex-wrap:wrap;min-height:70px;align-items:center;}
+.playing-card{width:48px;height:68px;border-radius:6px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:18px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,0.4);flex-shrink:0;position:relative;border:1px solid #ddd;}
+.playing-card.red{color:#c0392b;}
+.playing-card.black{color:#1a1a1a;}
+.playing-card.back{background:linear-gradient(135deg,#1a3a6a,#2a5aaa);color:transparent;}
+.playing-card .suit{font-size:12px;position:absolute;top:3px;left:5px;}
+.playing-card .suit-b{font-size:12px;position:absolute;bottom:3px;right:5px;transform:rotate(180deg);}
+.casino-message{text-align:center;font-size:18px;font-weight:800;min-height:28px;padding:4px 0;}
+.casino-message.win{color:#4ade80;}
+.casino-message.lose{color:#f87171;}
+.casino-message.push{color:var(--gold);}
+.casino-message.bj{color:var(--gold);font-size:22px;}
+.casino-chip{padding:8px 14px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+.casino-chip:active{transform:scale(0.95);}
+.casino-chip.all-in{border-color:#f87171;color:#f87171;}
+.casino-action-btn{padding:12px 28px;border-radius:12px;background:var(--accent);border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform 0.1s;}
+.casino-action-btn:active{transform:scale(0.96);}
+.casino-action-btn.secondary{background:var(--surface);border:1px solid var(--border);color:var(--text);}
+.casino-stats{display:flex;gap:10px;}
+.stat-box{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center;}
+.stat-val{font-size:20px;font-weight:800;color:var(--text);}
+.stat-lbl{font-size:11px;color:var(--muted);margin-top:2px;}
+
 .workout-overlay{display:none;position:fixed;inset:0;background:var(--bg);z-index:600;flex-direction:column;}
 .workout-overlay.open{display:flex;}
 .workout-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;padding-top:calc(16px + env(safe-area-inset-top));border-bottom:1px solid var(--border);}
@@ -184,6 +210,7 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
   <button class="tab-btn active" id="tab-habits" onclick="switchTab('habits')">Habits</button>
   <button class="tab-btn" id="tab-rewards" onclick="switchTab('rewards')">Rewards</button>
   <button class="tab-btn" id="tab-history" onclick="switchTab('history')">History</button>
+  <button class="tab-btn" id="tab-casino" onclick="switchTab('casino')">🃏 Casino</button>
 </div>
 <div class="main">
 
@@ -247,6 +274,69 @@ header h1{font-size:18px;font-weight:700;color:var(--accent);}
         <span class="section-title">Redemption History</span>
       </div>
       <div class="history-list" id="historyList"></div>
+    </div>
+  </div>
+
+  <!-- CASINO PAGE -->
+  <div class="page" id="page-casino">
+    <div class="casino-balance-card">
+      <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Your Balance</div>
+      <div style="font-size:32px;font-weight:800;color:var(--gold);" id="casinoBalance">0</div>
+      <div style="font-size:11px;color:var(--muted);">points</div>
+    </div>
+
+    <div class="casino-table" id="casinoTable">
+      <!-- dealer -->
+      <div style="margin-bottom:8px;">
+        <div class="casino-label">Dealer <span id="dealerScore" style="color:var(--muted);font-size:12px;"></span></div>
+        <div class="card-row" id="dealerCards"></div>
+      </div>
+      <!-- player -->
+      <div>
+        <div class="casino-label">You <span id="playerScore" style="color:var(--muted);font-size:12px;"></span></div>
+        <div class="card-row" id="playerCards"></div>
+      </div>
+    </div>
+
+    <div id="casinoMessage" class="casino-message"></div>
+
+    <!-- Bet input -->
+    <div id="betSection">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;text-align:center;">Set your bet</div>
+      <div style="display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:12px;">
+        <button class="casino-chip" onclick="adjustBet(-50)">−50</button>
+        <button class="casino-chip" onclick="adjustBet(-10)">−10</button>
+        <div id="betDisplay" style="font-size:22px;font-weight:800;color:var(--gold);min-width:80px;text-align:center;">50</div>
+        <button class="casino-chip" onclick="adjustBet(10)">+10</button>
+        <button class="casino-chip" onclick="adjustBet(50)">+50</button>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;">
+        <button class="casino-chip all-in" onclick="betAllIn()">All In</button>
+        <button class="casino-action-btn" onclick="startBlackjack()">Deal 🃏</button>
+      </div>
+    </div>
+
+    <!-- Game actions -->
+    <div id="gameSection" style="display:none;">
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <button class="casino-action-btn" onclick="playerHit()">Hit</button>
+        <button class="casino-action-btn secondary" onclick="playerStand()">Stand</button>
+        <button class="casino-action-btn secondary" id="doubleBtn" onclick="playerDouble()">Double</button>
+      </div>
+    </div>
+
+    <!-- Result actions -->
+    <div id="resultSection" style="display:none;">
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <button class="casino-action-btn" onclick="resetBlackjack()">Play Again</button>
+      </div>
+    </div>
+
+    <!-- Casino stats -->
+    <div class="casino-stats">
+      <div class="stat-box"><div class="stat-val" id="statWins">0</div><div class="stat-lbl">Wins</div></div>
+      <div class="stat-box"><div class="stat-val" id="statLosses">0</div><div class="stat-lbl">Losses</div></div>
+      <div class="stat-box"><div class="stat-val" id="statNet">0</div><div class="stat-lbl">Net pts</div></div>
     </div>
   </div>
 
@@ -375,12 +465,13 @@ const LEVEL_NAMES=['','Beginner','Trainee','Warrior','Champion','Legend','Mythic
 const LEVEL_COLORS=['','#888','#60a5fa','#4ade80','#a78bfa','#f5c842','#f472b6','#fff'];
 
 function switchTab(name){
-  ['habits','rewards','history'].forEach(t=>{
+  ['habits','rewards','history','casino'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('active',t===name);
     document.getElementById('page-'+t).classList.toggle('active',t===name);
   });
   if(name==='rewards')renderRewards();
   if(name==='history')renderHistory();
+  if(name==='casino')renderCasino();
 }
 
 function loadPointsData(){
@@ -1548,6 +1639,210 @@ function fireConfetti(){
 }
 
 function loop(t){drawAvatar(t);requestAnimationFrame(loop);}
+
+// ── BLACKJACK ENGINE ──────────────────────────────────────
+const CASINO_STATS_KEY='adayCasinoStats_v1';
+let bj={
+  deck:[], playerHand:[], dealerHand:[],
+  bet:50, phase:'bet', // bet | playing | done
+  stats:{wins:0,losses:0,pushes:0,net:0},
+};
+
+function loadCasinoStats(){
+  try{
+    const raw=localStorage.getItem(CASINO_STATS_KEY);
+    if(raw) bj.stats=JSON.parse(raw);
+  }catch(e){}
+}
+
+function saveCasinoStats(){
+  try{ localStorage.setItem(CASINO_STATS_KEY,JSON.stringify(bj.stats)); }catch(e){}
+}
+
+function makeDeck(){
+  const suits=['♠','♥','♦','♣'];
+  const values=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  const deck=[];
+  suits.forEach(s=>values.forEach(v=>deck.push({suit:s,value:v})));
+  // shuffle 6 decks
+  const sixDeck=[];
+  for(let i=0;i<6;i++) sixDeck.push(...deck);
+  for(let i=sixDeck.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [sixDeck[i],sixDeck[j]]=[sixDeck[j],sixDeck[i]];
+  }
+  return sixDeck;
+}
+
+function cardVal(card){
+  if(['J','Q','K'].includes(card.value)) return 10;
+  if(card.value==='A') return 11;
+  return parseInt(card.value);
+}
+
+function handValue(hand){
+  let val=hand.reduce((s,c)=>s+cardVal(c),0);
+  let aces=hand.filter(c=>c.value==='A').length;
+  while(val>21&&aces>0){ val-=10; aces--; }
+  return val;
+}
+
+function isRed(card){ return card.suit==='♥'||card.suit==='♦'; }
+
+function cardHTML(card, hidden=false){
+  if(hidden) return `<div class="playing-card back">🂠</div>`;
+  return `<div class="playing-card ${isRed(card)?'red':'black'}">
+    <div class="suit">${card.value}</div>
+    <div style="font-size:22px;">${card.suit}</div>
+    <div class="suit-b">${card.value}</div>
+  </div>`;
+}
+
+function renderCards(){
+  const ph=bj.playerHand, dh=bj.dealerHand;
+  const dealerHidden=bj.phase==='playing';
+  document.getElementById('playerCards').innerHTML=ph.map(c=>cardHTML(c)).join('');
+  document.getElementById('dealerCards').innerHTML=dh.map((c,i)=>cardHTML(c,dealerHidden&&i===1)).join('');
+  document.getElementById('playerScore').textContent=ph.length?`(${handValue(ph)})`:'' ;
+  const dealerShown=dealerHidden?handValue([dh[0]]):handValue(dh);
+  document.getElementById('dealerScore').textContent=dh.length?`(${dealerShown})`:'';
+}
+
+function renderCasino(){
+  loadCasinoStats();
+  document.getElementById('casinoBalance').textContent=points;
+  document.getElementById('betDisplay').textContent=bj.bet;
+  document.getElementById('statWins').textContent=bj.stats.wins;
+  document.getElementById('statLosses').textContent=bj.stats.losses;
+  const net=bj.stats.net;
+  const netEl=document.getElementById('statNet');
+  netEl.textContent=(net>0?'+':'')+net;
+  netEl.style.color=net>0?'#4ade80':net<0?'#f87171':'var(--text)';
+  renderCards();
+}
+
+function adjustBet(delta){
+  const min=10;
+  bj.bet=Math.max(min,Math.min(points,bj.bet+delta));
+  document.getElementById('betDisplay').textContent=bj.bet;
+}
+
+function betAllIn(){
+  bj.bet=Math.max(10,points);
+  document.getElementById('betDisplay').textContent=bj.bet;
+}
+
+function startBlackjack(){
+  if(points<bj.bet||bj.bet<1){
+    showMessage("Not enough points!",'lose');
+    return;
+  }
+  if(!bj.deck||bj.deck.length<30) bj.deck=makeDeck();
+  bj.playerHand=[bj.deck.pop(),bj.deck.pop()];
+  bj.dealerHand=[bj.deck.pop(),bj.deck.pop()];
+  bj.phase='playing';
+
+  document.getElementById('betSection').style.display='none';
+  document.getElementById('gameSection').style.display='';
+  document.getElementById('resultSection').style.display='none';
+  document.getElementById('doubleBtn').disabled=false;
+  showMessage('');
+
+  // check natural blackjack
+  if(handValue(bj.playerHand)===21){
+    endGame();
+    return;
+  }
+  renderCasino();
+}
+
+function playerHit(){
+  bj.playerHand.push(bj.deck.pop());
+  document.getElementById('doubleBtn').disabled=true;
+  renderCasino();
+  if(handValue(bj.playerHand)>21) endGame();
+}
+
+function playerStand(){
+  // dealer plays
+  while(handValue(bj.dealerHand)<17) bj.dealerHand.push(bj.deck.pop());
+  endGame();
+}
+
+function playerDouble(){
+  if(points<bj.bet*2){ showMessage("Not enough pts to double",'lose'); return; }
+  bj.bet*=2;
+  bj.playerHand.push(bj.deck.pop());
+  playerStand();
+}
+
+function endGame(){
+  bj.phase='done';
+  const pv=handValue(bj.playerHand);
+  const dv=handValue(bj.dealerHand);
+  const playerBJ=pv===21&&bj.playerHand.length===2;
+  const dealerBJ=dv===21&&bj.dealerHand.length===2;
+
+  let result='';
+  let ptsDelta=0;
+
+  if(pv>21){
+    result='lose'; ptsDelta=-bj.bet;
+    showMessage('Bust! −'+bj.bet+' pts','lose');
+  } else if(playerBJ&&!dealerBJ){
+    // blackjack pays 3:2
+    ptsDelta=Math.round(bj.bet*1.5);
+    result='win';
+    showMessage('🃏 Blackjack! +'+ptsDelta+' pts','bj');
+  } else if(dealerBJ&&!playerBJ){
+    result='lose'; ptsDelta=-bj.bet;
+    showMessage('Dealer Blackjack! −'+bj.bet+' pts','lose');
+  } else if(dv>21){
+    result='win'; ptsDelta=bj.bet;
+    showMessage('Dealer busts! +'+bj.bet+' pts','win');
+  } else if(pv>dv){
+    result='win'; ptsDelta=bj.bet;
+    showMessage('You win! +'+bj.bet+' pts','win');
+  } else if(dv>pv){
+    result='lose'; ptsDelta=-bj.bet;
+    showMessage('Dealer wins. −'+bj.bet+' pts','lose');
+  } else {
+    result='push'; ptsDelta=0;
+    showMessage('Push — bet returned','push');
+  }
+
+  points=Math.max(0,points+ptsDelta);
+  lifetimeXP+=Math.max(0,ptsDelta); // only gains count toward XP
+  savePoints();
+
+  if(result==='win') bj.stats.wins++;
+  else if(result==='lose') bj.stats.losses++;
+  else bj.stats.pushes++;
+  bj.stats.net+=ptsDelta;
+  saveCasinoStats();
+
+  document.getElementById('gameSection').style.display='none';
+  document.getElementById('resultSection').style.display='';
+  renderCasino();
+}
+
+function resetBlackjack(){
+  bj.phase='bet';
+  bj.playerHand=[];
+  bj.dealerHand=[];
+  bj.bet=Math.min(bj.bet,points)||10;
+  document.getElementById('betSection').style.display='';
+  document.getElementById('gameSection').style.display='none';
+  document.getElementById('resultSection').style.display='none';
+  showMessage('');
+  renderCasino();
+}
+
+function showMessage(msg,type=''){
+  const el=document.getElementById('casinoMessage');
+  el.textContent=msg;
+  el.className='casino-message'+(type?' '+type:'');
+}
 
 // ── BOOT ─────────────────────────────────────────────────
 load();loadPointsData();updateMarketPrices();render();requestAnimationFrame(loop);
